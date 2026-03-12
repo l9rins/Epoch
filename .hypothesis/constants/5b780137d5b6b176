@@ -1,0 +1,4 @@
+# file: C:\Users\Mark Lorenz\Desktop\Epoch\src\ml\quarter_trajectory.py
+# hypothesis_version: 6.151.9
+
+[0.0, 0.01, 0.02, 1.0, 50.0, 300, 720, 2880, 'AWAY_ACCELERATING', 'DEFENSIVE_LOCKDOWN', 'HOME_ACCELERATING', 'INSUFFICIENT_DATA', 'STABLE', '__main__', 'away_q_projection', 'away_score', 'confidence', 'home_q_projection', 'home_score', 'quarter', 'time_remaining', 'trajectory']

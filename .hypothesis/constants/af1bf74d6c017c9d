@@ -1,0 +1,4 @@
+# file: C:\Users\Mark Lorenz\Desktop\Epoch\src\intelligence\translation_matrix.py
+# hypothesis_version: 6.151.9
+
+[0.0, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 'Cut', 'HIGH', 'Handoff', 'Isolation', 'LOW', 'MEDIUM', 'OffRebound', 'OffScreen', 'PRBallHandler', 'PRRollman', 'Postup', 'SDribble', 'SDribble_confidence', 'SDribble_source', 'SPass', 'SPass_confidence', 'SPass_source', 'SSht3PT', 'SShtClose', 'SShtFT', 'SShtMR', 'Spotup', 'TCut', 'THandoff', 'TIso', 'TOffScreen', 'TPNR', 'TPNRRoll', 'TPost', 'TPutback', 'TSpotUp', 'TTransition', 'Transition', 'at_rim_pct', 'derived', 'fallback', 'fg3_pct', 'ft_pct', 'hot_zones', 'mid_range_pct', 'nba_api', 'poss_pct', 'shooting', 'synergy']

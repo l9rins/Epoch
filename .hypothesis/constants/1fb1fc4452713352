@@ -1,0 +1,4 @@
+# file: C:\Users\Mark Lorenz\Desktop\Epoch\src\pipeline\ingest\nba_api_client.py
+# hypothesis_version: 6.151.9
+
+[0.04, 0.05, 0.08, 0.1, 0.12, 0.15, 0.18, 0.2, 0.28, 0.32, 0.35, 0.36, 0.38, 0.4, 0.408, 0.42, 0.45, 0.5, 0.55, 0.58, 0.62, 0.65, 0.7, 0.75, 0.77, 0.85, 0.88, 0.9, 0.923, 0.95, 0.99, 1.0, 1.05, 1.1, 1.12, 1.15, 1.25, 1.3, 10.0, 14.0, 28.5, 201939, 203110, '2024-25', 'Cut', 'FG3_PCT', 'Handoff', 'Isolation', 'OffRebound', 'OffScreen', 'P', 'PERCENTILE', 'PLAYER_ID', 'PLAY_TYPE', 'POSS_PCT', 'PPP', 'PRBallHandler', 'PRRollman', 'PerGame', 'Postup', 'Regular Season', 'Spotup', 'Transition', 'Unknown Player', 'at_rim_pct', 'data/cache', 'fg3_pct', 'form', 'ft_pct', 'hot', 'hot_zones', 'last_10_pts_avg', 'mid_range_pct', 'neutral', 'percentile', 'player_id', 'player_name', 'poss_pct', 'ppp', 'r', 'season', 'shooting', 'synergy', 'trending', 'w']

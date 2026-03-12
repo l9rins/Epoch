@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+*.pkl
+data/cache/
+data/sim_logs/
+data/batch_logs/
+data/synthetic/
+data/signal_current.json
+*.ros
+*.jsonl
+.env

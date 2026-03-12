@@ -1,0 +1,4 @@
+# file: C:\Users\Mark Lorenz\Desktop\Epoch\src\ml\total_forecaster.py
+# hypothesis_version: 6.151.9
+
+[0.0, 0.15, 0.2, 0.24, 0.26, 0.4, 0.5, 0.6, 1.0, 224.5, 2880.0, -300, 200, 300, 2880, '__main__', 'away_score', 'confidence', 'final_away', 'final_home', 'home_score', 'over_prob', 'projected_total', 'quarter', 'states', 'time_remaining', 'under_prob']
