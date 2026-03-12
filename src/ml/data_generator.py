@@ -136,6 +136,6 @@ def generate_synthetic_games(num_games=10000, output_file="data/synthetic/games_
                 print(f"Generated {game_idx + 1} games...")
 
 if __name__ == "__main__":
-    print("Generating 10,000 synthetic games for ML training...")
-    generate_synthetic_games()
+    print("Generating 20,000 synthetic games for ML training...")
+    generate_synthetic_games(num_games=20000)
     print("Done. Saved to data/synthetic/games_10k.jsonl")

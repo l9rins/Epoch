@@ -46,8 +46,58 @@ def build_hetero_model(metadata, hidden_channels: int = 64, out_channels: int = 
     model = to_hetero(model, metadata, aggr='sum')
     return model
 
-def create_prediction_edge(home_team_id: str, away_team_id: str, ref_id: str, arena_id: str):
-    """Creates a temporary MATCHUP edge for predicting a specific future game."""
-    # This logic would dynamically attach a new GAME node to the two TEAM nodes,
-    # run a forward pass on the GNN, and read the GAME node's predicted embedding.
-    pass
+def create_prediction_edge(home_team_id: str, away_team_id: str, ref_id: str = None, arena_id: str = None):
+    """
+    Creates a GAME node and connects it to both teams (and optionally referee/arena).
+    Returns a populated KnowledgeGraphBuilder instance ready for GNN inference.
+    """
+    from src.graph.builder import KnowledgeGraphBuilder
+    from src.graph.schema import GraphNode, GraphEdge, NodeType, EdgeType
+
+    builder = KnowledgeGraphBuilder()
+    builder.build_poc_graph()
+
+    game_id = f"game_{home_team_id}_vs_{away_team_id}"
+
+    builder.add_node(GraphNode(
+        id=game_id,
+        type=NodeType.GAME,
+        features=[0.5, 0.5, 0.0],
+        metadata={"home": home_team_id, "away": away_team_id}
+    ))
+
+    # Connect teams to game node
+    if builder.graph.has_node(home_team_id):
+        builder.add_edge(GraphEdge(
+            source_id=home_team_id,
+            target_id=game_id,
+            type=EdgeType.MATCHUP,
+            weight=1.0
+        ))
+    if builder.graph.has_node(away_team_id):
+        builder.add_edge(GraphEdge(
+            source_id=away_team_id,
+            target_id=game_id,
+            type=EdgeType.MATCHUP,
+            weight=1.0
+        ))
+
+    # Optionally connect referee
+    if ref_id and builder.graph.has_node(ref_id):
+        builder.add_edge(GraphEdge(
+            source_id=ref_id,
+            target_id=game_id,
+            type=EdgeType.OFFICIATED_BY,
+            weight=1.0
+        ))
+
+    # Optionally connect arena
+    if arena_id and builder.graph.has_node(arena_id):
+        builder.add_edge(GraphEdge(
+            source_id=arena_id,
+            target_id=game_id,
+            type=EdgeType.PLAYS_AT,
+            weight=1.0
+        ))
+
+    return builder

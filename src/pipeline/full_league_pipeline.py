@@ -56,6 +56,28 @@ class FullLeaguePipeline:
             write_hot_zone(data, record_index, sub_idx, idx, value, auto_crc=True)
 
     def run(self):
+        # Run contextual data seeders before roster pipeline
+        print("Seeding calibration history...")
+        try:
+            from src.pipeline.calibration_seeder import seed_calibration_history
+            seed_calibration_history()
+        except Exception as e:
+            print(f"Calibration seeder warning: {e}")
+
+        print("Building fatigue context...")
+        try:
+            from src.pipeline.fatigue_seeder import run_fatigue_seeder
+            run_fatigue_seeder()
+        except Exception as e:
+            print(f"Fatigue seeder warning: {e}")
+
+        print("Assigning referee crews...")
+        try:
+            from src.pipeline.referee_seeder import run_referee_seeder
+            run_referee_seeder()
+        except Exception as e:
+            print(f"Referee seeder warning: {e}")
+
         if not self.base_ros.exists():
             print(f"Error: {self.base_ros} not found. Ensure root roster exists.")
             return

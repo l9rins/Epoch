@@ -19,26 +19,30 @@ export default function LiveDashboard({ gameId = "demo" }) {
   const alertsEndRef = useRef(null);
 
   // Demo System B Knowledge Graph Data
-  const [graphData] = useState({
-    nodes: [
-      { id: 'team_gsw', name: 'Warriors', type: 'TEAM', val: 8, color: '#3b82f6' },
-      { id: 'team_lal', name: 'Lakers', type: 'TEAM', val: 8, color: '#eab308' },
-      { id: 'player_curry', name: 'Stephen Curry', type: 'PLAYER', val: 5, color: '#60a5fa' },
-      { id: 'player_lebron', name: 'LeBron James', type: 'PLAYER', val: 5, color: '#facc15' },
-      { id: 'ref_foster', name: 'Scott Foster', type: 'REFEREE', val: 4, color: '#64748b' },
-      { id: 'arena_chase', name: 'Chase Center', type: 'ARENA', val: 6, color: '#10b981' },
-      { id: 'game_predict', name: 'Game: GSW vs LAL', type: 'GAME', val: 10, color: '#f43f5e' }
-    ],
-    links: [
-      { source: 'player_curry', target: 'team_gsw', type: 'PLAYS_FOR' },
-      { source: 'player_lebron', target: 'team_lal', type: 'PLAYS_FOR' },
-      { source: 'team_gsw', target: 'arena_chase', type: 'PLAYS_AT' },
-      { source: 'team_lal', target: 'arena_chase', type: 'PLAYS_AT' },
-      { source: 'ref_foster', target: 'game_predict', type: 'OFFICIATES' },
-      { source: 'team_gsw', target: 'game_predict', type: 'MATCHUP' },
-      { source: 'team_lal', target: 'game_predict', type: 'MATCHUP' }
-    ]
-  });
+  const [graphData, setGraphData] = useState({ nodes: [], links: [] });
+  const [graphLoading, setGraphLoading] = useState(false);
+
+  useEffect(() => {
+    if (activeTab !== 'graph') return;
+    setGraphLoading(true);
+    fetch(`/api/graph/${gameId}?home=team_gsw&away=team_lal`)
+      .then(res => res.json())
+      .then(data => {
+        setGraphData({ nodes: data.nodes || [], links: data.links || [] });
+      })
+      .catch(err => {
+        console.error('Graph fetch failed:', err);
+        // Fallback to minimal static data on error
+        setGraphData({
+          nodes: [
+            { id: 'team_gsw', name: 'Warriors', type: 'TEAM', val: 8, color: '#3b82f6' },
+            { id: 'team_lal', name: 'Lakers', type: 'TEAM', val: 8, color: '#eab308' },
+          ],
+          links: []
+        });
+      })
+      .finally(() => setGraphLoading(false));
+  }, [activeTab, gameId]);
 
   const generateReport = async () => {
     setIsGenerating(true);
@@ -247,7 +251,12 @@ export default function LiveDashboard({ gameId = "demo" }) {
 
           {/* Knowledge Graph Component */}
           {activeTab === 'graph' && (
-            <KnowledgeGraphVis graphData={graphData} />
+            graphLoading
+              ? <div className="flex items-center justify-center h-96 text-slate-400">
+                  <div className="w-8 h-8 rounded-full border-t-2 border-blue-500 animate-spin mr-3" />
+                  Loading Knowledge Graph...
+                </div>
+              : <KnowledgeGraphVis graphData={graphData} />
           )}
 
           {/* Scouting Report Component */}

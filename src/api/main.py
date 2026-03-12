@@ -11,6 +11,8 @@ from src.pipeline.schedule_fetcher import ScheduleFetcher
 from src.api.websocket import manager as ws_manager
 from src.intelligence.report_builder import ReportBuilder
 from src.intelligence.causal_explainer import CausalExplainer
+from src.graph.builder import KnowledgeGraphBuilder
+from src.graph.gnn_model import create_prediction_edge
 
 app = FastAPI(title="Rostra V1", description="Epoch Engine Payload API")
 
@@ -269,6 +271,51 @@ async def get_scouting_report(game_id: str):
         return {"game_id": game_id, "report": "Report generation failed. Check ANTHROPIC_API_KEY."}
 
     return {"game_id": game_id, "report": report}
+
+@app.get("/api/graph/{game_id}")
+async def get_graph_data(game_id: str, home: str = "team_gsw", away: str = "team_lal"):
+    """
+    Returns live Knowledge Graph data for a specific game.
+    Feeds System B (KnowledgeGraphVis.jsx) with real node/edge data.
+    """
+    # Build graph with prediction edge for this matchup
+    builder = create_prediction_edge(home, away)
+
+    NODE_COLORS = {
+        "TEAM": "#3b82f6",
+        "PLAYER": "#60a5fa",
+        "REFEREE": "#64748b",
+        "ARENA": "#10b981",
+        "GAME": "#f43f5e",
+        "COACH": "#a855f7",
+    }
+
+    nodes = []
+    for node_id, data in builder.graph.nodes(data=True):
+        nodes.append({
+            "id": node_id,
+            "name": data.get("name", node_id),
+            "type": data.get("type", "UNKNOWN"),
+            "val": 10 if data.get("type") == "GAME" else 5,
+            "color": NODE_COLORS.get(data.get("type", ""), "#ffffff"),
+        })
+
+    links = []
+    for src, tgt, data in builder.graph.edges(data=True):
+        links.append({
+            "source": src,
+            "target": tgt,
+            "type": data.get("type", ""),
+            "weight": data.get("weight", 1.0),
+        })
+
+    return {
+        "game_id": game_id,
+        "home": home,
+        "away": away,
+        "nodes": nodes,
+        "links": links,
+    }
 
 # Mount react frontend if built
 if FRONTEND_DIST.exists():
