@@ -1,3 +1,9 @@
+# EPOCH ENGINE — Session Context
+GitHub: private repo (epoch-engine)
+Last session: Phase 9 complete
+Current status: Team differentiation working, predictions live for today's NBA games
+Next: Phase 10
+
 # EPOCH ENGINE — PROJECT BIBLE
 
 > Claude Code reads this file automatically at the start of every session.
