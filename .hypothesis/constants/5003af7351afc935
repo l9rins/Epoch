@@ -1,4 +1,0 @@
-# file: C:\Users\Mark Lorenz\Desktop\Epoch\src\intelligence\signal_alerts.py
-# hypothesis_version: 6.151.9
-
-[0.0, 0.1, 0.25, 0.4, 0.5, 0.6, 0.75, 0.9, 1.0, 100, 120, 'AWAY', 'HOME', 'MOMENTUM_SHIFT', 'PROJECTION_UPDATE', 'WIN_PROB_THRESHOLD', 'a', 'alert_type', 'data', 'message', 'signal_alerts', 'timestamp', 'value']

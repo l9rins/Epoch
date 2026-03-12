@@ -1,4 +1,0 @@
-# file: C:\Users\Mark Lorenz\Desktop\Epoch\src\api\main.py
-# hypothesis_version: 6.151.9
-
-[404, 503, '/', '/api/accuracy', '/api/download/{team}', '/api/player/{name}', '/api/roster/{team}', '/api/signal/current', 'File not found', 'Rostra V1', 'SDribble', 'SPass', 'SSht3PT', 'SShtClose', 'SShtFT', 'SShtMR', 'TIso', 'TPNR', 'TSpotUp', 'TTransition', 'after', 'before', 'data', 'dist', 'frontend', 'ii', 'iii', 'jr.', 'name', 'r', 'roster.ros', 'signal_current.json', 'skill', 'sr.', 'tendency', 'warriors_poc.ros']

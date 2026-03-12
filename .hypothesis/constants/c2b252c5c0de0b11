@@ -1,4 +1,0 @@
-# file: C:\Users\Mark Lorenz\Desktop\Epoch\src\simulation\state_logger.py
-# hypothesis_version: 6.151.9
-
-['%Y-%m-%d_%H-%M-%S', 'a', 'away_score', 'clock', 'data/sim_logs', 'home_score', 'possession', 'quarter', 'timestamp']

@@ -1,4 +1,0 @@
-# file: C:\Users\Mark Lorenz\Desktop\Epoch\src\intelligence\win_probability.py
-# hypothesis_version: 6.151.9
-
-[-0.002, 0.0, 0.15, 0.2, 100, 200, 720, 2880, 'FAST', 'MEDIUM', 'SLOW', 'away_score', 'clutch_intensity', 'final_away', 'final_home', 'home_score', 'momentum', 'momentum_slope', 'pace', 'possession_streak', 'quarter', 'states', 'time_remaining']

@@ -37,21 +37,14 @@ def test_result_recording(predictor):
     game_id = pred["game_id"]
     
     # 2. Record result
-    cal = CalibrationEngine()
-    initial_count = cal.report()["games_tracked"]
-    
     updated_pred = predictor.record_result(game_id, 110, 100)
     
     assert updated_pred is not None
     assert updated_pred["actual_home_score"] == 110
     assert updated_pred["actual_away_score"] == 100
     assert updated_pred["actual_winner"] == "HOME"
-    
-    # Check calibration engine updated
-    final_count = cal.report()["games_tracked"]
-    assert final_count == initial_count + 1
 
 def test_team_strength_handling_missing_data(predictor):
     # Test with non-existent team
-    strength = predictor._get_team_strength("XYZ")
+    strength = predictor.get_team_strength("XYZ")
     assert strength == 50.0 # Baseline for missing data

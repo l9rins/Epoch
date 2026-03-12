@@ -19,6 +19,11 @@ app = FastAPI(title="Rostra V1", description="Epoch Engine Payload API")
 from src.api.intelligence_endpoints import router as intelligence_router
 app.include_router(intelligence_router)
 
+from src.api.props_endpoints import router as props_router
+from src.api.auth_endpoints import router as auth_router
+app.include_router(props_router)
+app.include_router(auth_router)
+
 # Mount paths
 FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
