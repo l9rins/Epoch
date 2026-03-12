@@ -275,7 +275,7 @@ async def get_scouting_report(game_id: str):
     report = generate_causal_explanation(prompt)
 
     if report is None or report.startswith("Causal explanation unavailable"):
-        return {"game_id": game_id, "report": "Report generation failed. Check GEMINI_API_KEY."}
+        return {"game_id": game_id, "report": "Report generation failed. Check GROQ_API_KEY."}
 
     return {"game_id": game_id, "report": report}
 
