@@ -16,6 +16,9 @@ from src.graph.gnn_model import create_prediction_edge
 
 app = FastAPI(title="Rostra V1", description="Epoch Engine Payload API")
 
+from src.api.intelligence_endpoints import router as intelligence_router
+app.include_router(intelligence_router)
+
 # Mount paths
 FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
