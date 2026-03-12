@@ -53,12 +53,50 @@ def generate_synthetic_games(num_games=10000, output_file="data/synthetic/games_
                     q = 4
                     clk = time_remaining
                     
-                # Scoring
-                # 0 pts ~ 50%, 2 pts ~ 35%, 3 pts ~ 15%
+                # Synthetic Vision Features
+                # Spacing (0-100), Density (0-10), Coverage (0-100)
+                spacing = random.normalvariate(50, 15)
+                spacing = max(0, min(100, spacing))
+                
+                density = random.normalvariate(4, 2)
+                density = max(0, min(10, density))
+                
+                coverage = random.normalvariate(60, 20)
+                coverage = max(0, min(100, coverage))
+                
+                # Binary events (frequency based on game state/pace)
+                is_fast_break = 1 if random.random() < (base_pace / 500) else 0
+                is_open_shooter = 1 if random.random() < (spacing / 500) else 0
+                is_pick_roll = 1 if random.random() < 0.15 else 0
+                
+                # Fatigue (Home/Away)
+                home_fresh = random.random() > 0.1 # 10% chance of B2B
+                away_fresh = random.random() > 0.1
+                
+                # Q1=1.0, Q2=0.97, Q3=0.94, Q4=0.90
+                q_multi = {1: 1.0, 2: 0.97, 3: 0.94, 4: 0.90}.get(q, 0.90)
+                home_fatigue = q_multi - (0.05 if not home_fresh else 0)
+                away_fatigue = q_multi - (0.05 if not away_fresh else 0)
+
+                # Scoring logic adjustment based on vision features
+                # Efficiency boost for fast break or open shooter
+                eff_mod = 1.0
+                if is_fast_break: eff_mod *= 1.4
+                if is_open_shooter: eff_mod *= 1.3
+                if spacing > 70: eff_mod *= 1.1
+                if density > 7: eff_mod *= 0.8 # Clogged paint hurts scoring
+                
+                mod_efficiency = base_efficiency * eff_mod
+                
+                # Scoring Probability based on adjusted efficiency
+                # 0 pts, 2 pts, or 3 pts
                 r = random.random()
-                if r < 0.50:
+                three_prob = 0.15 * (1.5 if is_open_shooter else 1.0)
+                two_prob = 0.35 * (1.2 if is_fast_break else 0.9 if density > 7 else 1.0)
+                
+                if r < (1.0 - (three_prob + two_prob)):
                     pts = 0
-                elif r < 0.85:
+                elif r < (1.0 - three_prob):
                     pts = 2
                 else:
                     pts = 3
@@ -78,7 +116,15 @@ def generate_synthetic_games(num_games=10000, output_file="data/synthetic/games_
                     "away_score": away_score,
                     "possession": possession,
                     "time_remaining": time_remaining,
-                    "pts_scored_this_poss": pts
+                    "pts_scored_this_poss": pts,
+                    "defensive_spacing": round(spacing, 1),
+                    "paint_density": round(density, 1),
+                    "three_point_coverage": round(coverage, 1),
+                    "pick_roll": is_pick_roll,
+                    "fast_break": is_fast_break,
+                    "open_shooter": is_open_shooter,
+                    "fatigue_home": round(home_fatigue, 2),
+                    "fatigue_away": round(away_fatigue, 2)
                 }
                 states.append(state_dict)
                 

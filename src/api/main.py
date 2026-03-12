@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
@@ -8,6 +8,9 @@ from datetime import datetime
 from src.binary.ros_reader import load_ros, build_name_pool, read_all_players
 from src.binary.constants import FIELD_TO_IDX
 from src.pipeline.schedule_fetcher import ScheduleFetcher
+from src.api.websocket import manager as ws_manager
+from src.intelligence.report_builder import ReportBuilder
+from src.intelligence.causal_explainer import CausalExplainer
 
 app = FastAPI(title="Rostra V1", description="Epoch Engine Payload API")
 
@@ -190,6 +193,45 @@ def get_prediction_history():
 @app.get("/api/schedule")
 def get_nba_schedule():
     return _schedule_fetcher.get_todays_games()
+
+@app.websocket("/ws/game/{game_id}")
+async def websocket_endpoint(websocket: WebSocket, game_id: str):
+    await ws_manager.connect(websocket, game_id)
+    try:
+        while True:
+            # We don't expect messages from the client in this one-way signal push,
+            # but we need to receive to handle disconnects properly.
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket, game_id)
+
+_causal_explainer = CausalExplainer()
+
+@app.get("/api/report/{game_id}")
+def get_scouting_report(game_id: str):
+    """Generate a Causal Chain Scouting Report via LLM."""
+    # In a full impl, we'd fetch this game's real context and predictions from the DB
+    mock_context = {
+        "home_team": "GSW",
+        "away_team": "LAL",
+        "rest_advantage": "GSW (+1 day)",
+        "injuries": "LAL: Davis (Probable, Shoulder)"
+    }
+    mock_preds = {
+        "win_probability": 0.67,
+        "projected_home": 112,
+        "projected_away": 105,
+        "ensemble_agreement": "7/8 models",
+        "graph_insight": "LAL historically struggles vs GSW transition pace; Davis shoulder degrades rim protection by 12%."
+    }
+    
+    prompt = ReportBuilder.construct_prompt(game_id, mock_context, mock_preds)
+    report_text = _causal_explainer.generate_report(prompt)
+    
+    if not report_text:
+        raise HTTPException(status_code=500, detail="Failed to generate report")
+        
+    return {"game_id": game_id, "report": report_text}
 
 # Mount react frontend if built
 if FRONTEND_DIST.exists():

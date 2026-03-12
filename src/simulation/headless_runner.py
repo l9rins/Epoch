@@ -14,6 +14,7 @@ import time
 import json
 import uuid
 import argparse
+import asyncio
 from pathlib import Path
 from dataclasses import asdict
 
@@ -30,8 +31,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from src.simulation.process_manager import get_nba2k14_pid, wait_for_process
 from src.simulation.memory_reader import MemoryReader
+from src.simulation.state_logger import StateLogger
 from src.intelligence.win_probability import WinProbabilityModel
+from src.intelligence.momentum import MomentumTracker
+from src.intelligence.signal_alerts import AlertEngine
 from src.ml.calibration import CalibrationEngine
+from src.api.websocket import manager as ws_manager
 
 class NBA2K14Automator:
     def __init__(self, pid):
@@ -116,73 +121,119 @@ class NBA2K14Automator:
         
         print("Returned to Main Menu.")
 
-def monitor_game(reader, game_id, log_dir, win_model=None, cal_engine=None):
-    """Monitor a running game until it ends."""
-    log_file = log_dir / f"game_{game_id}.jsonl"
-    print(f"Monitoring game {game_id}, logging to {log_file}")
+async def monitor_game(reader, game_id, log_dir, win_model=None, cal_engine=None):
+    """Monitor a running game until it ends, logging enriched state every tick."""
+    print(f"Monitoring game {game_id}")
     
+    logger = StateLogger(log_dir=str(log_dir))
+    momentum_tracker = MomentumTracker()
+    alert_engine = AlertEngine(log_dir=str(log_dir))
     states = []
     last_state = None
     stable_end_count = 0
     
-    # We'll take a few sample predictions for the calibration engine
-    # e.g., one per quarter to avoid over-weighting a single game
+    # One calibration sample per quarter to avoid over-weighting
     calibration_samples = {1: False, 2: False, 3: False, 4: False}
 
-    with open(log_file, "w") as f:
-        while True:
-            state = reader.read_state()
-            if not state:
-                print("Lost connection to game memory.")
-                break
-            
-            # Log state
-            state_dict = {
-                "timestamp": state.timestamp,
-                "quarter": state.quarter,
-                "clock": state.clock,
-                "home_score": state.home_score,
-                "away_score": state.away_score,
-                "possession": state.possession
-            }
-            f.write(json.dumps(state_dict) + "\n")
-            states.append(state)
-            
-            # Record prediction for calibration
-            if win_model and cal_engine and state.quarter in calibration_samples:
-                # Take sample at the middle of the quarter (~6min/2 or 1min/2)
-                if not calibration_samples[state.quarter] and state.clock <= 30:
-                    prob = win_model(state)
-                    # We store the prediction now, and will resolve it with the outcome later
-                    calibration_samples[state.quarter] = prob
-            
-            # Display progress
-            if len(states) % 20 == 0:
-                print(f"  Q{state.quarter} {state.clock:.1f}s | {state.home_score}-{state.away_score}")
+    while True:
+        state = reader.read_state()
+        if not state:
+            print("Lost connection to game memory.")
+            break
+        
+        # Compute analytics
+        momentum = momentum_tracker(state)
+        win_prob = win_model(state, momentum) if win_model else None
+        proj_home, proj_away = win_model.projected_score(state) if win_model else (None, None)
+        time_elapsed = win_model.calculate_time_elapsed(state) if win_model else None
+        
+        home_rate = (state.home_score / time_elapsed * 60) if time_elapsed and time_elapsed > 0 else 0.0
+        away_rate = (state.away_score / time_elapsed * 60) if time_elapsed and time_elapsed > 0 else 0.0
+        
+        # Log enriched state locally
+        logger.log_enriched(
+            state,
+            win_probability=win_prob,
+            momentum=momentum,
+            projected_home=proj_home,
+            projected_away=proj_away,
+            home_scoring_rate=home_rate,
+            away_scoring_rate=away_rate,
+            game_time_elapsed=time_elapsed,
+        )
+        states.append(state)
 
-            # Detect game end: Q4, clock 0, and no changes for 10 seconds
-            if state.quarter >= 4 and state.clock <= 0:
-                if last_state and state.home_score == last_state.home_score and \
-                   state.away_score == last_state.away_score:
-                    stable_end_count += 1
-                else:
-                    stable_end_count = 0
-                
-                # Check every 0.5s, so 20 stable polls = 10s
-                if stable_end_count >= 20:
-                    print("Game end detected (stable final score).")
-                    break
+        # Broadcast live enriched state to WebSocket
+        state_payload = {
+            "type": "STATE",
+            "game_id": game_id,
+            "timestamp": state.timestamp,
+            "quarter": state.quarter,
+            "clock": round(state.clock, 2),
+            "home_score": state.home_score,
+            "away_score": state.away_score,
+            "possession": state.possession,
+            "win_probability": round(win_prob, 4) if win_prob is not None else None,
+            "momentum": round(momentum, 2) if momentum is not None else None,
+            "projected_home": proj_home,
+            "projected_away": proj_away,
+            "home_scoring_rate": round(home_rate, 2),
+            "away_scoring_rate": round(away_rate, 2),
+            "score_differential": state.home_score - state.away_score,
+        }
+        await ws_manager.broadcast(game_id, state_payload)
+        
+        # Process Signal Alerts
+        if time_elapsed is not None and win_prob is not None and proj_home is not None:
+            alerts = alert_engine.process(
+                game_time=time_elapsed,
+                win_prob=win_prob,
+                momentum=momentum,
+                proj_home=proj_home,
+                proj_away=proj_away
+            )
+            for alert in alerts:
+                alert_payload = {
+                    "type": "ALERT",
+                    "game_id": game_id,
+                    "alert_type": alert.alert_type,
+                    "tier": alert.tier,
+                    "value": alert.value,
+                    "message": alert.message,
+                    "timestamp": alert.timestamp,
+                }
+                await ws_manager.broadcast(game_id, alert_payload)
+
+        # Record prediction for calibration
+        if win_prob is not None and cal_engine and state.quarter in calibration_samples:
+            if not calibration_samples[state.quarter] and state.clock <= 30:
+                calibration_samples[state.quarter] = win_prob
+        
+        # Display progress
+        if len(states) % 20 == 0:
+            wp_str = f" WP:{win_prob:.1%}" if win_prob is not None else ""
+            print(f"  Q{state.quarter} {state.clock:.1f}s | {state.home_score}-{state.away_score}{wp_str}")
+
+        # Detect game end: Q4, clock 0, stable for 10 seconds
+        if state.quarter >= 4 and state.clock <= 0:
+            if last_state and state.home_score == last_state.home_score and \
+               state.away_score == last_state.away_score:
+                stable_end_count += 1
+            else:
+                stable_end_count = 0
             
-            last_state = state
-            time.sleep(0.5)
+            if stable_end_count >= 20:
+                print("Game end detected (stable final score).")
+                break
+        
+        last_state = state
+        await asyncio.sleep(0.5)
 
     if not states:
         return None
         
     final = states[-1]
     home_won = final.home_score > final.away_score
-    winner = "HOME" if home_won else "AWAY"
-    if final.home_score == final.away_score: winner = "TIE"
     
     # Finalize calibration samples
     if cal_engine:
@@ -190,15 +241,11 @@ def monitor_game(reader, game_id, log_dir, win_model=None, cal_engine=None):
             if isinstance(pred, float):
                 cal_engine.log_outcome(pred, home_won)
 
-    return {
-        "game_id": game_id,
-        "home_score": final.home_score,
-        "away_score": final.away_score,
-        "winner": winner,
-        "duration_states": len(states)
-    }
+    result = logger.summary()
+    result["game_id"] = game_id
+    return result
 
-def run_batch(num_games, home_team, away_team):
+async def run_batch(num_games, home_team, away_team):
     log_dir = Path("data/batch_logs")
     log_dir.mkdir(parents=True, exist_ok=True)
     results_file = Path("data/batch_results.jsonl")
@@ -213,16 +260,10 @@ def run_batch(num_games, home_team, away_team):
     win_model = WinProbabilityModel()
     cal_engine = CalibrationEngine()
 
-    # Initial Setup (Skipped as requested for manual main menu start)
-    # automator.navigate_to_main_menu()
-    # automator.set_one_minute_quarters()
-
     for i in range(num_games):
         game_id = str(uuid.uuid4())[:8]
         print(f"\n=== GAME {i+1}/{num_games} (ID: {game_id}) ===")
         
-        # We start directly at Main Menu or rely on exit_to_main_menu from previous game
-        # automator.navigate_to_main_menu()
         automator.start_quick_game(home_team, away_team)
         
         # Wait for tipoff (Quarter becomes 1)
@@ -232,9 +273,9 @@ def run_batch(num_games, home_team, away_team):
             s = reader.read_state()
             if s and s.quarter > 0:
                 break
-            time.sleep(1)
+            await asyncio.sleep(1)
 
-        result = monitor_game(reader, game_id, log_dir, win_model, cal_engine)
+        result = await monitor_game(reader, game_id, log_dir, win_model, cal_engine)
         
         # STEP 7 / Exit sequence
         automator.exit_to_main_menu()
@@ -248,8 +289,7 @@ def run_batch(num_games, home_team, away_team):
                 f.write(json.dumps(result) + "\n")
             print(f"Game Recorded: {result['home_score']}-{result['away_score']} ({result['winner']})")
         
-        # Small wait before next iteration
-        time.sleep(5)
+        await asyncio.sleep(5)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -258,4 +298,4 @@ if __name__ == "__main__":
     parser.add_argument("--away", default="lakers")
     args = parser.parse_args()
 
-    run_batch(args.games, args.home, args.away)
+    asyncio.run(run_batch(args.games, args.home, args.away))

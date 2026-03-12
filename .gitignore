@@ -12,3 +12,14 @@ data/signal_current.json
 *.ros
 *.jsonl
 .env
+
+# Junk/Logs
+*.txt
+*.log
+tree.txt
+debug_*
+test_dummy.py
+test_sanity_check.py
+yolov8x.pt
+.hypothesis/
+.pytest_cache/
