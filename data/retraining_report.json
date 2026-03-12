@@ -1,0 +1,71 @@
+{
+  "started_at": "2026-03-12T23:23:15.076393",
+  "steps": {
+    "data_pipeline": {
+      "status": "OK",
+      "total_games": 3690,
+      "total_player_logs": 32199,
+      "injury_proxy_games": 0
+    },
+    "ensemble": {
+      "status": "RETRAINED",
+      "ensemble_auc": 0.6962,
+      "ensemble_brier": 0.2203,
+      "auc_target_met": false,
+      "brier_target_met": false
+    },
+    "causal_learning": {
+      "status": "OK",
+      "learned_edges": 0,
+      "avg_r2": 0.0,
+      "r2_target_met": false
+    },
+    "player_distributions": {
+      "status": "OK",
+      "total_players": 228,
+      "real_distributions": 228,
+      "archetype_fallbacks": 0
+    },
+    "signal_validation": {
+      "status": "OK",
+      "total_signals": 72,
+      "overall_precision": 0.5139,
+      "tier_summary": {
+        "1": {
+          "precision": 0.5211,
+          "status": "BELOW_TARGET"
+        },
+        "2": {
+          "precision": null,
+          "status": "INSUFFICIENT_DATA"
+        },
+        "3": {
+          "precision": null,
+          "status": "INSUFFICIENT_DATA"
+        }
+      }
+    }
+  },
+  "improvements": {
+    "auc": {
+      "before": 0.837,
+      "after": 0.6962,
+      "delta": -0.1408
+    },
+    "brier": {
+      "before": 0.2146,
+      "after": 0.2203,
+      "delta": 0.0057
+    },
+    "causal_r2": {
+      "before": 0.0,
+      "after": 0.0,
+      "delta": 0.0
+    }
+  },
+  "errors": [],
+  "completed_at": "2026-03-12T23:24:28.838196",
+  "elapsed_seconds": 73.8,
+  "total_errors": 0,
+  "status": "SUCCESS"
+}

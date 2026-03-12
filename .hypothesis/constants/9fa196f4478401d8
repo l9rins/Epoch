@@ -1,4 +1,0 @@
-# file: C:\Users\Mark Lorenz\Desktop\Epoch\src\ml\scoring_run_predictor.py
-# hypothesis_version: 6.151.9
-
-[0.0, 120, 200, 1000, '__main__', 'away_score', 'home_score', 'momentum', 'possession', 'pts_scored_this_poss', 'quarter', 'r', 'states', 'time_remaining']

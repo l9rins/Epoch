@@ -1,4 +1,0 @@
-# file: C:\Users\Mark Lorenz\Desktop\Epoch\src\ml\calibration.py
-# hypothesis_version: 6.151.9
-
-[0.18, 0.21, 1000, 'a', 'actual', 'beating_espn_bpi', 'brier_score', 'data', 'games_tracked', 'predicted', 'r', 'target']

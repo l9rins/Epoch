@@ -1,0 +1,17 @@
+{
+  "rf_auc": 0.6998,
+  "xgb_auc": 0.682,
+  "ensemble_auc": 0.6962,
+  "rf_brier": 0.2181,
+  "xgb_brier": 0.2242,
+  "ensemble_brier": 0.2203,
+  "rf_weight": 0.45,
+  "xgb_weight": 0.55,
+  "training_samples": 2952,
+  "test_samples": 738,
+  "mean_disagreement": 0.0555,
+  "high_uncertainty_rate": 0.0163,
+  "top_features": [],
+  "auc_target_met": false,
+  "brier_target_met": false
+}

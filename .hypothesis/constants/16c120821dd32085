@@ -1,4 +1,0 @@
-# file: C:\Users\Mark Lorenz\Desktop\Epoch\src\ml\game_script.py
-# hypothesis_version: 6.151.9
-
-[0.0, 60.0, 100, 190, 200, 240, 2880, 'BACK_AND_FORTH', 'BLOWOUT', 'BLOWOUT_AWAY', 'BLOWOUT_HOME', 'COMEBACK', 'GRIND', 'LIVE SPREAD UNSTABLE', 'SHOOTOUT', 'UNDERS ARE SAFER', 'UNKNOWN', '__main__', 'away_score', 'betting_implication', 'confidence', 'final_away', 'final_home', 'home_score', 'momentum', 'quarter', 'script', 'states', 'time_remaining']

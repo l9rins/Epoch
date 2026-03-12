@@ -1,4 +1,0 @@
-# file: C:\Users\Mark Lorenz\Desktop\Epoch\src\ml\aggregator.py
-# hypothesis_version: 6.151.9
-
-[-4.5, 224.5, -110, 500, 'away_score', 'clock', 'home_score', 'momentum', 'over_prob', 'pace', 'possession', 'possession_count', 'projected_total', 'pts_scored_this_poss', 'quarter', 'script', 'time_remaining']
