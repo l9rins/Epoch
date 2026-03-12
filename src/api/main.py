@@ -215,7 +215,7 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
     except WebSocketDisconnect:
         ws_manager.disconnect(websocket, game_id)
 
-_causal_explainer = CausalExplainer()
+from src.intelligence.causal_explainer import generate_causal_explanation
 
 @app.get("/api/report/{game_id}")
 async def get_scouting_report(game_id: str):
@@ -270,12 +270,11 @@ async def get_scouting_report(game_id: str):
         }
 
     builder = ReportBuilder()
-    explainer = CausalExplainer()
 
     prompt = builder.construct_prompt(game_id, game_context, predictions)
-    report = explainer.generate_report(prompt)
+    report = generate_causal_explanation(prompt)
 
-    if report is None:
+    if report is None or report.startswith("Causal explanation unavailable"):
         return {"game_id": game_id, "report": "Report generation failed. Check GEMINI_API_KEY."}
 
     return {"game_id": game_id, "report": report}
