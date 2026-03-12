@@ -38,6 +38,31 @@ from src.intelligence.signal_alerts import AlertEngine
 from src.ml.calibration import CalibrationEngine
 from src.api.websocket import manager as ws_manager
 
+# NBA 2K14 team selection order (alphabetical scroll order in game)
+TEAM_SELECT_ORDER = [
+    "ATL", "BOS", "BKN", "CHA", "CHI", "CLE", "DAL", "DEN",
+    "DET", "GSW", "HOU", "IND", "LAC", "LAL", "MEM", "MIA",
+    "MIL", "MIN", "NOP", "NYK", "OKC", "ORL", "PHI", "PHX",
+    "POR", "SAC", "SAS", "TOR", "UTA", "WAS"
+]
+
+TEAM_ALIASES = {
+    "WARRIORS": "GSW", "LAKERS": "LAL", "CELTICS": "BOS",
+    "NETS": "BKN", "KNICKS": "NYK", "BULLS": "CHI",
+    "HEAT": "MIA", "SPURS": "SAS", "CLIPPERS": "LAC",
+    "NUGGETS": "DEN", "SUNS": "PHX", "BUCKS": "MIL",
+    "76ERS": "PHI", "SIXERS": "PHI", "RAPTORS": "TOR",
+    "JAZZ": "UTA", "THUNDER": "OKC", "BLAZERS": "POR",
+    "TRAILBLAZERS": "POR", "ROCKETS": "HOU", "MAVS": "DAL",
+    "MAVERICKS": "DAL", "GRIZZLIES": "MEM", "WOLVES": "MIN",
+    "TIMBERWOLVES": "MIN", "PACERS": "IND", "PISTONS": "DET",
+    "CAVS": "CLE", "CAVALIERS": "CLE", "HAWKS": "ATL",
+    "MAGIC": "ORL", "HORNETS": "CHA", "PELICANS": "NOP",
+    "KINGS": "SAC", "WIZARDS": "WAS",
+}
+
+DEFAULT_TEAM_INDEX = 0  # ATL is index 0, the default starting position
+
 class NBA2K14Automator:
     def __init__(self, pid):
         self.pid = pid
@@ -59,6 +84,31 @@ class NBA2K14Automator:
         print(f"  Sending: {keys}")
         send_keys(keys)
         time.sleep(delay)
+
+    def _resolve_team(self, team_str: str) -> str:
+        """Normalize team string to 3-letter abbreviation."""
+        t = team_str.upper().strip()
+        if t in TEAM_SELECT_ORDER:
+            return t
+        return TEAM_ALIASES.get(t, "GSW")  # fallback to GSW
+
+    def _navigate_to_team(self, target_abbr: str, current_index: int) -> int:
+        """
+        Navigate team carousel from current_index to target team.
+        Returns the new current_index after navigation.
+        Uses shortest path (forward only for simplicity — max 30 presses).
+        """
+        target_index = TEAM_SELECT_ORDER.index(target_abbr)
+        steps = (target_index - current_index) % len(TEAM_SELECT_ORDER)
+        
+        if steps == 0:
+            return current_index
+            
+        print(f"  Navigating to {target_abbr} ({steps} presses)...")
+        for _ in range(steps):
+            self.send(']', delay=0.35)
+        
+        return target_index
 
     def navigate_to_main_menu(self):
         """Minimal menu clearing to avoid breaking state."""
@@ -86,26 +136,35 @@ class NBA2K14Automator:
         self.send("{ENTER}") # Confirm
         self.send("{VK_ESCAPE}" * 3) # Back to Main Menu
 
-    def start_quick_game(self, home_team=None, away_team=None):
-        """Start a quick game using the exact user-provided sequence."""
-        print(f"Starting Quick Game sequence (Recorded Timing)...")
-        
-        self.send(' ', delay=0.67)   # enter team select
-        self.send(']', delay=1.22)   # home team scroll 1
-        self.send(']', delay=0.48)   # home team scroll 2
-        self.send(']', delay=0.56)   # home team scroll 3
-        self.send(']', delay=0.51)   # home team scroll 4 → Lakers
-        self.send('a', delay=1.11)   # switch to away 1
-        self.send('a', delay=0.42)   # switch to away 2
-        self.send(']', delay=0.70)   # away team scroll 1
-        self.send(']', delay=0.47)   # away team scroll 2
-        self.send(']', delay=0.49)   # away team scroll 3
-        self.send(']', delay=0.56)   # away team scroll 4
-        self.send(']', delay=2.24)   # away team scroll 5 → Warriors
-        self.send('d', delay=2.01)   # CPU vs CPU
-        self.send('{ENTER}', delay=0.71)  # start game
-        
-        print("Game started. Handing off to monitor...")
+    def start_quick_game(self, home_team: str = "GSW", away_team: str = "LAL"):
+        """
+        Start a quick game navigating to the correct teams dynamically.
+        home_team and away_team accept full names or 3-letter abbreviations.
+        """
+        home_abbr = self._resolve_team(home_team)
+        away_abbr = self._resolve_team(away_team)
+        print(f"Starting Quick Game: {away_abbr} @ {home_abbr}")
+
+        # Enter team select screen
+        self.send(' ', delay=0.67)
+
+        # Navigate HOME team from default position (ATL = 0)
+        self._navigate_to_team(home_abbr, DEFAULT_TEAM_INDEX)
+        time.sleep(0.5)
+
+        # Switch to AWAY team selector
+        self.send('a', delay=1.11)
+        self.send('a', delay=0.42)
+
+        # Navigate AWAY team from default position (ATL = 0)
+        self._navigate_to_team(away_abbr, DEFAULT_TEAM_INDEX)
+        time.sleep(0.5)
+
+        # Set CPU vs CPU and start
+        self.send('d', delay=2.01)
+        self.send('{ENTER}', delay=0.71)
+
+        print(f"Game started: {away_abbr} @ {home_abbr}. Handing off to monitor...")
 
     def exit_to_main_menu(self):
         """Exit to main menu after game completion using precise sequence."""

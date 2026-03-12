@@ -24,7 +24,7 @@ class CausalExplainer:
             # We use haiku or sonnet for latency/cost depending on tier. 
             # Prompt 03 is highly structured so Sonnet is perfect.
             response = getattr(self.client, "messages").create(
-                model="claude-3-5-sonnet-20241022",
+                model="claude-sonnet-4-5",
                 max_tokens=1024,
                 temperature=0.3, # Keep it analytical, not creative
                 system="You are an elite NBA predictive analyst writing for professional syndicates.",
