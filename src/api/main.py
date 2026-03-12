@@ -276,7 +276,7 @@ async def get_scouting_report(game_id: str):
     report = explainer.generate_report(prompt)
 
     if report is None:
-        return {"game_id": game_id, "report": "Report generation failed. Check ANTHROPIC_API_KEY."}
+        return {"game_id": game_id, "report": "Report generation failed. Check GEMINI_API_KEY."}
 
     return {"game_id": game_id, "report": report}
 
