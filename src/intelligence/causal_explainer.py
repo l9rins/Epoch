@@ -1,23 +1,20 @@
 import os
-import google.generativeai as genai
-from pathlib import Path
-
-# Load key from environment
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-GEMINI_MODEL = "gemini-2.0-flash"
-
-genai.configure(api_key=GEMINI_API_KEY)
+from google import genai
 
 def generate_causal_explanation(prompt: str) -> str:
     """
     Generate a causal explanation for a game using Gemini.
     Falls back to a static message if API is unavailable.
     """
-    if not GEMINI_API_KEY:
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
         return "Causal explanation unavailable — GEMINI_API_KEY not configured."
     try:
-        model = genai.GenerativeModel(GEMINI_MODEL)
-        response = model.generate_content(prompt)
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt,
+        )
         return response.text
     except Exception as e:
         return f"Causal explanation unavailable: {e}"
