@@ -15,9 +15,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from src.pipeline.ingest.nba_api_client import NBAApiClient
 from src.intelligence.translation_matrix import TranslationMatrix
 from src.binary.constants import FIELD_TO_IDX
-from src.pipeline.health_monitor import HealthMonitor
-from src.pipeline.latency_tracker import LatencyTracker
-from src.pipeline.resource_audit import ResourceAudit
+from src.binary.ros_reader import load_ros, build_name_pool, read_all_players
+from src.binary.ros_writer import write_skill, write_tendency, write_hot_zone, save_ros
+from src.pipeline.health_monitor import get_pipeline_health, pipeline_is_stale, audit_pipeline_resources
 
 # For test compatibility and league reference
 all_teams_static = nba_teams_static.get_teams()
@@ -36,10 +36,8 @@ class FullLeaguePipeline:
         self.matrix = TranslationMatrix()
         self.data_dir = Path("data")
         self.data_dir.mkdir(parents=True, exist_ok=True)
+        self.data_dir.mkdir(parents=True, exist_ok=True)
         self.base_ros = self.data_dir / "roster.ros"
-        self.health = HealthMonitor()
-        self.latency = LatencyTracker()
-        self.audit_tool = ResourceAudit()
 
     def find_player_in_ros(self, players, name):
         search_parts = [part for part in name.split() if part.lower() not in ("ii", "iii", "jr.", "sr.")]
@@ -62,8 +60,6 @@ class FullLeaguePipeline:
             write_hot_zone(data, record_index, sub_idx, idx, value, auto_crc=True)
 
     def run(self):
-        self.latency.start("overall_pipeline")
-        self.latency.start("seeders")
         # Run contextual data seeders before roster pipeline
         print("Seeding calibration history...")
         try:
@@ -85,7 +81,6 @@ class FullLeaguePipeline:
             run_referee_seeder()
         except Exception as e:
             print(f"Referee seeder warning: {e}")
-        self.latency.stop("seeders")
 
         if not self.base_ros.exists():
             print(f"Error: {self.base_ros} not found. Ensure root roster exists.")
@@ -163,12 +158,13 @@ class FullLeaguePipeline:
             json.dump(report, f, indent=2)
         
         print("\nPipeline Complete.")
-        self.latency.stop("overall_pipeline")
         
         # Log final audits
-        self.latency.log_latency()
-        self.audit_tool.log_audit()
-        self.health.log_health()
+        report["health"] = get_pipeline_health(str(self.data_dir))
+        report["resources"] = audit_pipeline_resources()
+        
+        with open(self.data_dir / "pipeline_report.json", "w") as f:
+            json.dump(report, f, indent=2)
         
         return report
 

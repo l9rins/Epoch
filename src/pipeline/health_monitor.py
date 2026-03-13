@@ -32,6 +32,11 @@ def is_data_stale(file_path: str) -> bool:
     age = get_data_age_hours(file_path)
     return age >= STALE_THRESHOLD_HOURS
 
+def pipeline_is_stale(data_dir: str) -> bool:
+    """Check if the main roster file in data_dir is stale."""
+    roster_path = Path(data_dir) / "roster.ros"
+    return is_data_stale(str(roster_path))
+
 def get_pipeline_health(data_dir: str) -> dict:
     """
     Perform a multi-point health check on the simulation pipeline.

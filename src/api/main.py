@@ -24,14 +24,14 @@ from src.api.auth_endpoints import router as auth_router
 app.include_router(props_router)
 app.include_router(auth_router)
 
+# Mount paths
+FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
+
 @app.get("/api/pipeline/health")
 def get_pipeline_health_endpoint():
     from src.pipeline.health_monitor import get_pipeline_health
     return get_pipeline_health(str(DATA_DIR))
-
-# Mount paths
-FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
-DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 
 KEY_FIELDS = ["TIso", "TPNR", "TSpotUp", "TTransition", "SSht3PT", "SShtMR", "SShtFT", "SShtClose", "SDribble", "SPass"]
 

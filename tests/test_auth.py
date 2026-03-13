@@ -7,11 +7,22 @@ from src.api.auth import (
     require_tier,
     check_and_increment_api_calls,
     get_subscription_status,
+    _load_users,
+    _save_users,
 )
+
+def _delete_user_by_email(email: str):
+    """Helper to ensure tests are idempotent."""
+    users = _load_users()
+    to_delete = [uid for uid, u in users.items() if u["email"] == email]
+    for uid in to_delete:
+        del users[uid]
+    _save_users(users)
 
 def test_user_creation_and_auth():
     email = "test@epoch-engine.com"
     pwd = "securepassword123"
+    _delete_user_by_email(email)
     
     # Create
     user = create_user(email, pwd, "SIGNAL")
@@ -40,6 +51,7 @@ def test_tier_requirements():
 
 def test_api_rate_limits():
     email = "limit@epoch.com"
+    _delete_user_by_email(email)
     user = create_user(email, "pwd", "ROSTRA") # limit 100
     
     # Simulate hitting limit
@@ -55,7 +67,9 @@ def test_api_rate_limits():
     assert check_and_increment_api_calls(user.user_id) == False # 101st call blocked
 
 def test_token_flow():
-    user = create_user("token@test.com", "pwd", "API")
+    email = "token@test.com"
+    _delete_user_by_email(email)
+    user = create_user(email, "pwd", "API")
     token = create_access_token(user)
     assert token is not None
     
