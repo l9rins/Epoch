@@ -190,6 +190,7 @@ def predict_ensemble(
 
 def predict_single_game(
     feature_vector: np.ndarray,
+    is_stale: bool = False,
 ) -> dict:
     """
     Predict win probability for a single game feature vector.
@@ -199,17 +200,34 @@ def predict_single_game(
     ensemble, rf, xgb = predict_ensemble(X)
     win_prob = float(ensemble[0])
     disagreement = float(abs(rf[0] - xgb[0]))
+    confidence_level = (
+        "HIGH" if disagreement < 0.05
+        else "MEDIUM" if disagreement < DISAGREEMENT_THRESHOLD
+        else "LOW"
+    )
+
+    # Session A: Pipeline Armor — downgrade confidence if staleness detected
+    if is_stale:
+        if confidence_level == "HIGH":
+            confidence_level = "MEDIUM"
+        else:
+            confidence_level = "LOW"
+
+    # Widen confidence intervals (pseudo-CI based on disagreement and staleness)
+    base_ci = 0.05 + disagreement
+    if is_stale:
+        base_ci /= 0.65 # CONFIDENCE_STALE_PENALTY divisor to widen
+
     return {
         "win_probability": round(win_prob, 4),
         "rf_probability": round(float(rf[0]), 4),
         "xgb_probability": round(float(xgb[0]), 4),
         "disagreement": round(disagreement, 4),
-        "is_uncertain": disagreement > DISAGREEMENT_THRESHOLD,
-        "confidence": (
-            "HIGH" if disagreement < 0.05
-            else "MEDIUM" if disagreement < DISAGREEMENT_THRESHOLD
-            else "LOW"
-        ),
+        "is_uncertain": disagreement > DISAGREEMENT_THRESHOLD or is_stale,
+        "confidence": confidence_level,
+        "ci_lower": round(max(0, win_prob - base_ci), 4),
+        "ci_upper": round(min(1, win_prob + base_ci), 4),
+        "is_stale": is_stale,
     }
 
 def load_ensemble_meta() -> dict:

@@ -10,7 +10,7 @@ from src.binary.constants import FIELD_TO_IDX
 from src.pipeline.schedule_fetcher import ScheduleFetcher
 from src.api.websocket import manager as ws_manager
 from src.intelligence.report_builder import ReportBuilder
-from src.intelligence.causal_explainer import CausalExplainer
+from src.intelligence.causal_explainer import generate_causal_explanation
 from src.graph.builder import KnowledgeGraphBuilder
 from src.graph.gnn_model import create_prediction_edge
 
@@ -23,6 +23,11 @@ from src.api.props_endpoints import router as props_router
 from src.api.auth_endpoints import router as auth_router
 app.include_router(props_router)
 app.include_router(auth_router)
+
+@app.get("/api/pipeline/health")
+def get_pipeline_health_endpoint():
+    from src.pipeline.health_monitor import get_pipeline_health
+    return get_pipeline_health(str(DATA_DIR))
 
 # Mount paths
 FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
@@ -322,6 +327,90 @@ async def get_graph_data(game_id: str, home: str = "team_gsw", away: str = "team
         "away": away,
         "nodes": nodes,
         "links": links,
+    }
+
+from fastapi import BackgroundTasks
+from src.ml.retrainer import run_full_retraining
+
+@app.get("/api/ensemble/meta")
+def get_ensemble_meta():
+    meta_path = DATA_DIR / "models" / "ensemble_meta.json"
+    if not meta_path.exists():
+        return {"status": "not_trained", "ensemble_agreement": "N/A", "auc": 0.0}
+    with open(meta_path, "r") as f:
+        return json.load(f)
+
+@app.get("/api/retrainer/report")
+def get_retrainer_report():
+    report_path = DATA_DIR / "retraining_report.json"
+    if not report_path.exists():
+        return {"status": "no_report"}
+    with open(report_path, "r") as f:
+        return json.load(f)
+
+@app.post("/api/retrainer/run")
+async def run_retraining_task(background_tasks: BackgroundTasks):
+    background_tasks.add_task(run_full_retraining)
+    return {"status": "started", "message": "Retraining pipeline initiated"}
+
+@app.get("/api/causal/weights")
+def get_causal_weights():
+    # Attempt to load learned weights, fallback to default
+    weights_path = DATA_DIR / "models" / "causal_weights.json"
+    if weights_path.exists():
+        with open(weights_path, "r") as f:
+            return json.load(f)
+    # Default priors matching intelligence/causal_learner.py
+    return {
+        "home_scoring_rate": 0.15,
+        "away_scoring_rate": 0.15,
+        "momentum": 0.12,
+        "rest_advantage": 0.08,
+        "scoring_run": 0.10,
+        "offensive_rating": 0.14,
+        "defensive_rating": 0.14,
+        "clutch_variance": 0.05,
+        "lineup_efficiency": 0.07
+    }
+
+@app.get("/api/signal/validation")
+def get_signal_validation():
+    val_path = DATA_DIR / "signal_validation_report.json"
+    if not val_path.exists():
+        return {"status": "no_validation_data"}
+    with open(val_path, "r") as f:
+        return json.load(f)
+
+@app.post("/api/journal/log")
+async def log_journal_bet(entry: dict):
+    # In a real app we'd use a DB, here we append to a JSONL
+    journal_file = DATA_DIR / "journal" / "entries.jsonl"
+    journal_file.parent.mkdir(parents=True, exist_ok=True)
+    
+    entry["timestamp"] = datetime.now().isoformat()
+    with open(journal_file, "a") as f:
+        f.write(json.dumps(entry) + "\n")
+    return entry
+
+@app.get("/api/journal/{user_id}")
+def get_user_journal(user_id: str):
+    journal_file = DATA_DIR / "journal" / "entries.jsonl"
+    if not journal_file.exists():
+        return []
+    entries = []
+    with open(journal_file, "r") as f:
+        for line in f:
+            entries.append(json.loads(line))
+    return entries
+
+@app.get("/api/journal/{user_id}/edge-profile")
+def get_edge_profile(user_id: str):
+    # Placeholder for edge profile computation logic
+    return {
+        "overall_roi": 0.082,
+        "best_signal": "TIER 1 CLUTCH",
+        "sample_size": 154,
+        "confidence": "HIGH"
     }
 
 # Mount react frontend if built

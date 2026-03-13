@@ -4,6 +4,6 @@
 
 @layer base {
   body {
-    @apply bg-midnight text-slate-200;
+    @apply bg-terminal-bg text-terminal-text;
   }
 }

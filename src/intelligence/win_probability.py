@@ -69,7 +69,12 @@ class WinProbabilityModel:
     def _logistic_fallback(self, state: GameState) -> float:
         time_remaining = self.calculate_time_remaining(state)
         score_diff = state.home_score - state.away_score
-        z = (score_diff * 0.15) + ((time_remaining / 60) * -0.002)
+        
+        # Unbiased tipoff: z should be 0 when score_diff is 0
+        # Scaling: smaller leads matter more as time decreases
+        scaling_factor = 1.0 / (math.sqrt(time_remaining / 60) + 1.0)
+        z = (score_diff * 0.5 * scaling_factor)
+        
         return 1 / (1 + math.exp(-z))
 
     def __call__(self, state: GameState, momentum=0.0, extra_features: dict = None) -> float:
@@ -79,7 +84,13 @@ class WinProbabilityModel:
                 return float(self.rf_model.predict_proba(features)[0][1])
             except Exception:
                 pass
+        # Fallback to logistic if no RF model or error
         return self._logistic_fallback(state)
+
+    def train_on_instance(self, games: list = None):
+        """Instance wrapper to ensure self.rf_model updates after class-level training."""
+        self.train(games)
+        self._load_model()
 
     @classmethod
     def train(cls, games: list = None):

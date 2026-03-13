@@ -7,8 +7,23 @@ export default {
   theme: {
     extend: {
       colors: {
-        'midnight': '#0B1120',
-        'midnight-light': '#1e293b'
+        terminal: {
+          bg:      '#080B0F',
+          surface: '#0D1117',
+          border:  '#1C2333',
+          muted:   '#8B949E',
+          text:    '#E6EDF3',
+          accent:  '#58A6FF',
+          green:   '#3FB950',
+          red:     '#F85149',
+          yellow:  '#D29922',
+          orange:  '#DB6D28',
+          purple:  '#BC8CFF',
+        }
+      },
+      fontFamily: {
+        mono: ['JetBrains Mono', 'Fira Code', 'Consolas', 'monospace'],
+        sans: ['Inter', 'system-ui', 'sans-serif'],
       }
     },
   },

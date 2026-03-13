@@ -14,12 +14,10 @@ def test_learn_health_to_ortg_weight_insufficient_data():
 def test_learn_all_causal_weights_synthetic():
     # Generate perfect linear synthetic data
     logs = []
-    for _ in range(30): # > MIN_INJURY_SAMPLES
-        # Base impact
-        impact = -6.0
+    for i in range(30): 
+        # Add variance to impact
+        impact = -6.0 + (i % 5) - 2.0 # range [-8, -4]
         health_delta = impact / 20.0
-        # Perfect linear drop in ORtg: ortg_delta = weight * health_delta
-        # Let's target a weight of 0.8
         ortg_delta = 0.8 * health_delta
         ortg_before = 110.0
         ortg_after = ortg_before * (1 + ortg_delta)
@@ -29,7 +27,7 @@ def test_learn_all_causal_weights_synthetic():
             "team_ortg_before": ortg_before,
             "team_ortg_after": ortg_after,
             "player_usage_rate": 0.30,
-            "win_probability_delta": -0.10,
+            "win_probability_delta": 0.5 * health_delta, # proxy for WP
         })
         
     result = learn_all_causal_weights(logs)

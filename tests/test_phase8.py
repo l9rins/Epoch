@@ -64,8 +64,7 @@ def test_upgraded_win_prob_auc():
 
     games = load_synthetic_data(max_games=500)
     model = WinProbabilityModel()
-    model.train(games)
-
+    model.train_on_instance(games)
     assert model.rf_model is not None
     assert WinProbabilityModel._last_auc > 0.75
 

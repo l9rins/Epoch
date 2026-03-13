@@ -1,0 +1,58 @@
+{
+  "player_id": 201939,
+  "player_name": "2024-25",
+  "season": "2024-25",
+  "synergy": {
+    "Isolation": {
+      "poss_pct": 0.1,
+      "ppp": 1.05,
+      "percentile": 0.85
+    },
+    "PRBallHandler": {
+      "poss_pct": 0.35,
+      "ppp": 1.12,
+      "percentile": 0.95
+    },
+    "Spotup": {
+      "poss_pct": 0.15,
+      "ppp": 1.25,
+      "percentile": 0.9
+    },
+    "OffScreen": {
+      "poss_pct": 0.2,
+      "ppp": 1.3,
+      "percentile": 0.99
+    },
+    "Transition": {
+      "poss_pct": 0.1,
+      "ppp": 1.15,
+      "percentile": 0.75
+    }
+  },
+  "shooting": {
+    "fg3_pct": 0.397,
+    "mid_range_pct": 0.45,
+    "at_rim_pct": 0.65,
+    "ft_pct": 0.923
+  },
+  "hot_zones": {
+    "zone_1": 0.55,
+    "zone_2": 0.55,
+    "zone_3": 0.55,
+    "zone_4": 0.55,
+    "zone_5": 0.55,
+    "zone_6": 0.55,
+    "zone_7": 0.55,
+    "zone_8": 0.55,
+    "zone_9": 0.55,
+    "zone_10": 0.55,
+    "zone_11": 0.55,
+    "zone_12": 0.55,
+    "zone_13": 0.55,
+    "zone_14": 0.55
+  },
+  "form": {
+    "last_10_pts_avg": 28.5,
+    "trending": "hot"
+  }
+}

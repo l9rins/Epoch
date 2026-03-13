@@ -4,13 +4,12 @@ src/frontend/dist/
 __pycache__/
 *.pyc
 *.pkl
-data/cache/
-data/sim_logs/
-data/batch_logs/
-data/synthetic/
-data/signal_current.json
-*.ros
-*.jsonl
+data/*.json
+data/*.jsonl
+data/*.db
+data/*.pkl
+data/models/
+!data/.gitkeep
 .env
 
 # Junk/Logs

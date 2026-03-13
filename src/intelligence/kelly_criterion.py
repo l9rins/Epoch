@@ -187,6 +187,7 @@ def compute_kelly_recommendation(
     decimal_odds: float = 1.909,
     causal_context: Optional[str] = None,
     journal_path: str = "data/betting_journal.jsonl",
+    is_stale: bool = False,
 ) -> KellyRecommendation:
     """
     Main entry point. Compute full Kelly recommendation for a signal.
@@ -226,6 +227,13 @@ def compute_kelly_recommendation(
     recommended_fraction = (half_kelly * tier_multiplier).quantize(
         Decimal("0.0001"), rounding=ROUND_HALF_UP
     )
+
+    # Session A: Pipeline Armor — apply staleness multiplier
+    if is_stale:
+        recommended_fraction = (recommended_fraction * Decimal("0.40")).quantize(
+            Decimal("0.0001"), rounding=ROUND_HALF_UP
+        )
+
     recommended_fraction = max(recommended_fraction, RUIN_PROTECTION_FLOOR)
     recommended_fraction = min(recommended_fraction, MAX_KELLY_FRACTION)
 
@@ -243,11 +251,17 @@ def compute_kelly_recommendation(
         f"Tier {tier} signal | Edge: {edge.blended_edge:+.4f}",
         f"Win probability: {float(wp):.1%} vs implied {float(edge.implied_probability):.1%}",
         f"Full Kelly: {float(full_kelly):.2%} → Half-Kelly: {float(half_kelly):.2%}",
+    ]
+    
+    if is_stale:
+        reasoning_parts.append("STALE DATA PENALTY (40% multiplier) applied")
+        
+    reasoning_parts.extend([
         f"Tier {tier} adjustment ({float(tier_multiplier):.0%}): {float(recommended_fraction):.2%} of bankroll",
         f"Recommended bet: ${float(recommended_bet):,.2f} on ${float(bankroll_d):,.2f} bankroll",
         f"Expected value: {float(ev):+.4f} per dollar risked",
         f"Sample confidence: {edge.confidence} ({edge.sample_count} historical samples)",
-    ]
+    ])
     if causal_context:
         reasoning_parts.append(f"Causal context: {causal_context}")
 

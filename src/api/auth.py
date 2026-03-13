@@ -44,10 +44,14 @@ class User:
 
 def _load_users() -> dict:
     if not USERS_PATH.exists():
+        _save_users({})
         return {}
     try:
         with open(USERS_PATH) as f:
             return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        _save_users({})
+        return {}
     except Exception:
         return {}
 

@@ -54,6 +54,8 @@ class TestTranslationMatrix:
     def test_original_unchanged(self):
         script_path = Path(__file__).resolve().parent.parent / "scripts" / "curry_proof_of_concept.py"
         roster_path = Path(__file__).resolve().parent.parent / "data" / "roster.ros"
+        if not roster_path.exists():
+            pytest.skip("No roster.ros found — binary asset not in version control")
         before_bytes = roster_path.read_bytes()
         
         subprocess.run([sys.executable, str(script_path)], check=True)

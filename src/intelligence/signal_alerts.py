@@ -73,6 +73,7 @@ class AlertEngine:
         momentum: float,
         proj_home: int,
         proj_away: int,
+        is_stale: bool = False,
     ) -> List[SignalAlert]:
         alerts = []
         now = time.time()
@@ -87,6 +88,10 @@ class AlertEngine:
         alerts.extend(self._check_projection(now, game_time, proj_home, proj_away))
 
         for a in alerts:
+            if is_stale:
+                # Session A: Pipeline Armor — downgrade tier by 1 (T1->T2, T2->T3, T3->T3)
+                a.tier = min(3, a.tier + 1)
+                a.message = f"[STALE] {a.message}"
             self._log_alert(a)
 
         return alerts

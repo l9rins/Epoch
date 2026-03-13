@@ -1,4 +1,5 @@
 import os
+import pytest
 from src.api.betting_journal import (
     create_journal_entry,
     append_journal_entry,
@@ -41,6 +42,10 @@ def test_journal_flow():
     
 def test_edge_profile_computation():
     test_user = "test_edge_user_456"
+    
+    # SESSION A FIX: Ensure test isolation by purging journal before count-sensitive assertions
+    if os.path.exists("data/betting_journal.jsonl"):
+        os.remove("data/betting_journal.jsonl")
     
     # Need 30+ samples to hit MIN_SAMPLES_FOR_EDGE_PROFILE
     for i in range(35):
