@@ -14,6 +14,8 @@ import PropBoard from '../Props/PropBoard'
 import OracleTerminal from '../Oracle/OracleTerminal'
 import QuantumRunner from '../Quantum/QuantumRunner'
 import JournalDashboard from '../Journal/JournalDashboard'
+import LiveSignalFeed from '../Signal/LiveSignalFeed'
+import KellyEngine from '../Kelly/KellyEngine'
 
 const VIEWS = {
   OVERVIEW: { name: 'SYSTEM_OVERVIEW', component: SystemOverview, icon: LayoutDashboard },

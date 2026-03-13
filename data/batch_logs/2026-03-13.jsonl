@@ -1,0 +1,6 @@
+{"timestamp": 1773387095.8037443, "alert_type": "PROJECTION_UPDATE", "tier": 3, "value": 660.0, "message": "Projected final: 0-0"}
+{"timestamp": 1773387299.045119, "alert_type": "PROJECTION_UPDATE", "tier": 3, "value": 682.9893951416016, "message": "Projected final: 0-0"}
+{"timestamp": 1773387370.4372444, "alert_type": "PROJECTION_UPDATE", "tier": 3, "value": 682.9893951416016, "message": "Projected final: 0-0"}
+{"timestamp": 1773387378.305678, "alert_type": "WIN_PROB_THRESHOLD", "tier": 3, "value": 0.395, "message": "\u2193 Win probability crossed 60% for AWAY"}
+{"timestamp": 1773387378.5370853, "alert_type": "WIN_PROB_THRESHOLD", "tier": 3, "value": 0.395, "message": "\u2193 Win probability crossed 60% for AWAY"}
+{"timestamp": 1773387789.8727307, "alert_type": "PROJECTION_UPDATE", "tier": 3, "value": 0.0, "message": "Projected final: 0-0"}

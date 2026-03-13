@@ -66,7 +66,7 @@ DEFAULT_TEAM_INDEX = 0  # ATL is index 0, the default starting position
 class NBA2K14Automator:
     def __init__(self, pid):
         self.pid = pid
-        self.app = Application().connect(process=pid)
+        self.app = Application(backend="win32").connect(process=pid)
         self.window = self.app.top_window()
         print(f"Connected to NBA 2K14 (PID: {pid})")
 
@@ -323,7 +323,12 @@ async def run_batch(num_games, home_team, away_team):
         game_id = str(uuid.uuid4())[:8]
         print(f"\n=== GAME {i+1}/{num_games} (ID: {game_id}) ===")
         
-        automator.start_quick_game(home_team, away_team)
+        # Check if game is already running
+        s = reader.read_state()
+        if s and s.quarter > 0:
+            print("Game already in progress. Skipping automation...")
+        else:
+            automator.start_quick_game(home_team, away_team)
         
         # Wait for tipoff (Quarter becomes 1)
         print("Waiting for tipoff...")
