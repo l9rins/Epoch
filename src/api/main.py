@@ -22,8 +22,13 @@ app.include_router(intelligence_router)
 
 from src.api.props_endpoints import router as props_router
 from src.api.auth_endpoints import router as auth_router
+from src.api.stripe_endpoints import router as stripe_router
+from src.api.public_endpoints import router as public_router
+
 app.include_router(props_router)
 app.include_router(auth_router)
+app.include_router(stripe_router)
+app.include_router(public_router)
 
 # ── Paths — defined ONCE, at module level, before any endpoint uses them ──
 FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
@@ -55,8 +60,7 @@ def get_pipeline_health_endpoint():
     and the cascade multipliers that downstream models are applying.
     """
     from src.pipeline.health_monitor import get_pipeline_health
-    game_log_path = DATA_DIR / "real_game_logs.jsonl"
-    return get_pipeline_health(game_log_path=game_log_path)
+    return get_pipeline_health(data_dir=DATA_DIR)
 
 
 # ── Roster endpoints ──────────────────────────────────────────────────────────
