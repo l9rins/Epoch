@@ -1,9 +1,10 @@
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 import json
 from datetime import datetime
+import time
 
 from src.binary.ros_reader import load_ros, build_name_pool, read_all_players
 from src.binary.constants import FIELD_TO_IDX
@@ -24,16 +25,15 @@ from src.api.auth_endpoints import router as auth_router
 app.include_router(props_router)
 app.include_router(auth_router)
 
-# Mount paths
+# ── Paths — defined ONCE, at module level, before any endpoint uses them ──
 FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 
-@app.get("/api/pipeline/health")
-def get_pipeline_health_endpoint():
-    from src.pipeline.health_monitor import get_pipeline_health
-    return get_pipeline_health(str(DATA_DIR))
+KEY_FIELDS = [
+    "TIso", "TPNR", "TSpotUp", "TTransition",
+    "SSht3PT", "SShtMR", "SShtFT", "SShtClose", "SDribble", "SPass",
+]
 
-KEY_FIELDS = ["TIso", "TPNR", "TSpotUp", "TTransition", "SSht3PT", "SShtMR", "SShtFT", "SShtClose", "SDribble", "SPass"]
 
 def get_player_val(player, field):
     if field not in FIELD_TO_IDX:
@@ -45,124 +45,135 @@ def get_player_val(player, field):
         return player.skills[idx]
     return 0
 
+
+# ── SESSION A: Pipeline Health endpoint ──────────────────────────────────────
+
+@app.get("/api/pipeline/health")
+def get_pipeline_health_endpoint():
+    """
+    Returns current pipeline health including staleness, source used,
+    and the cascade multipliers that downstream models are applying.
+    """
+    from src.pipeline.health_monitor import get_pipeline_health
+    game_log_path = DATA_DIR / "real_game_logs.jsonl"
+    return get_pipeline_health(game_log_path=game_log_path)
+
+
+# ── Roster endpoints ──────────────────────────────────────────────────────────
+
 @app.get("/api/roster/{team}")
 def get_roster(team: str):
     base_file = DATA_DIR / "roster.ros"
     poc_file = DATA_DIR / f"{team}_poc.ros"
-    
+
     if not poc_file.exists():
         raise HTTPException(status_code=404, detail=f"No POC roster found for team: {team}")
-        
-    # Read both binaries
+
     b_data = load_ros(base_file)
     b_pool = build_name_pool(b_data)
     b_players = read_all_players(b_data, b_pool)
-    
+
     p_data = load_ros(poc_file)
     p_pool = build_name_pool(p_data)
     p_players = read_all_players(p_data, p_pool)
-    
-    # Needs the JSON map for accurate team indexing without querying all 450 players
+
     json_map = DATA_DIR / f"{team}_roster.json"
     if not json_map.exists():
         raise HTTPException(status_code=404, detail=f"No JSON roster map found for team: {team}")
-        
+
     with open(json_map, "r") as f:
         team_mapping = json.load(f)
-        
+
     results = []
-    
     for full_name in team_mapping.keys():
-        # Match using last names and clean suffixes as implemented in phase 3
-        search_parts = [part for part in full_name.split() if part.lower() not in ("ii", "iii", "jr.", "sr.")]
+        search_parts = [
+            part for part in full_name.split()
+            if part.lower() not in ("ii", "iii", "jr.", "sr.")
+        ]
         search = search_parts[-1].lower() if search_parts else ""
-        
+
         orig_p = next((p for p in b_players if search in p.name.lower()), None)
         poc_p = next((p for p in p_players if search in p.name.lower()), None)
-        
+
         if not orig_p or not poc_p:
             continue
-            
-        before_vals = {f: get_player_val(orig_p, f) for f in KEY_FIELDS}
-        after_vals = {f: get_player_val(poc_p, f) for f in KEY_FIELDS}
-        
+
         results.append({
             "name": full_name,
-            "before": before_vals,
-            "after": after_vals
+            "before": {f: get_player_val(orig_p, f) for f in KEY_FIELDS},
+            "after": {f: get_player_val(poc_p, f) for f in KEY_FIELDS},
         })
-        
+
     return results
+
 
 @app.get("/api/player/{name}")
 def get_player(name: str):
     base_file = DATA_DIR / "roster.ros"
-    poc_file = DATA_DIR / "warriors_poc.ros" # Defaulting for Rostra V1 payload map
-    
+    poc_file = DATA_DIR / "warriors_poc.ros"
+
     b_data = load_ros(base_file)
     b_pool = build_name_pool(b_data)
     b_players = read_all_players(b_data, b_pool)
-    
+
     p_data = load_ros(poc_file)
     p_pool = build_name_pool(p_data)
     p_players = read_all_players(p_data, p_pool)
-    
-    search_parts = [part for part in name.split() if part.lower() not in ("ii", "iii", "jr.", "sr.")]
+
+    search_parts = [
+        part for part in name.split()
+        if part.lower() not in ("ii", "iii", "jr.", "sr.")
+    ]
     search = search_parts[-1].lower() if search_parts else ""
-    
+
     orig_p = next((p for p in b_players if search in p.name.lower()), None)
     poc_p = next((p for p in p_players if search in p.name.lower()), None)
-    
+
     if not orig_p or not poc_p:
         raise HTTPException(status_code=404, detail="Player not found in binary")
-        
-    before_vals = {f: get_player_val(orig_p, f) for f in KEY_FIELDS}
-    after_vals = {f: get_player_val(poc_p, f) for f in KEY_FIELDS}
-    
+
     return {
         "name": name,
-        "before": before_vals,
-        "after": after_vals
+        "before": {f: get_player_val(orig_p, f) for f in KEY_FIELDS},
+        "after": {f: get_player_val(poc_p, f) for f in KEY_FIELDS},
     }
+
 
 @app.get("/api/download/{team}")
 def download_roster(team: str):
     file_path = DATA_DIR / f"{team}_poc.ros"
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found")
-        
     return FileResponse(
-        path=file_path, 
-        media_type="application/octet-stream", 
-        filename=f"{team}_poc.ros"
+        path=file_path,
+        media_type="application/octet-stream",
+        filename=f"{team}_poc.ros",
     )
 
-import time
 
 @app.get("/api/signal/current")
 def get_current_signal():
     signal_file = DATA_DIR / "signal_current.json"
     if not signal_file.exists():
         raise HTTPException(status_code=503, detail="No simulation is running")
-        
-    # Check if the file is stale (not updated in 10 seconds)
     if time.time() - signal_file.stat().st_mtime > 10:
         raise HTTPException(status_code=503, detail="Simulation appears to be dead")
-        
     with open(signal_file, "r") as f:
-        data = json.load(f)
-        
-    return data
+        return json.load(f)
+
 
 from src.ml.calibration import CalibrationEngine
 
 _calibration_engine = CalibrationEngine()
 
+
 @app.get("/api/accuracy")
 def get_accuracy():
     return _calibration_engine.accuracy_report()
 
+
 _schedule_fetcher = ScheduleFetcher()
+
 
 @app.get("/api/predictions/today")
 def get_todays_predictions():
@@ -170,9 +181,9 @@ def get_todays_predictions():
     log_file = DATA_DIR / "predictions" / f"{date_str}.jsonl"
     if not log_file.exists():
         return []
-    
     with open(log_file, "r") as f:
         return [json.loads(line) for line in f]
+
 
 @app.get("/api/predictions/history")
 def get_prediction_history():
@@ -180,19 +191,20 @@ def get_prediction_history():
     pred_dir = DATA_DIR / "predictions"
     if not pred_dir.exists():
         return {"metrics": {}, "predictions": []}
-        
+
     for log_file in pred_dir.glob("*.jsonl"):
         with open(log_file, "r") as f:
             all_preds.extend([json.loads(line) for line in f])
-            
-    # Calculate metrics
+
     completed = [p for p in all_preds if p["actual_winner"] is not None]
-    correct = sum(1 for p in completed if (p["actual_winner"] == "HOME" and p["actual_home_score"] > p["actual_away_score"]) or 
-                                       (p["actual_winner"] == "AWAY" and p["actual_away_score"] > p["actual_home_score"]))
-    
+    correct = sum(
+        1 for p in completed
+        if (p["actual_winner"] == "HOME" and p["actual_home_score"] > p["actual_away_score"])
+        or (p["actual_winner"] == "AWAY" and p["actual_away_score"] > p["actual_home_score"])
+    )
     accuracy = correct / len(completed) if completed else 0
     brier = _calibration_engine.accuracy_report().get("brier_score", 0)
-    
+
     return {
         "metrics": {
             "total_predictions": len(all_preds),
@@ -200,39 +212,31 @@ def get_prediction_history():
             "correct": correct,
             "accuracy": round(accuracy, 3),
             "brier_score": brier,
-            "vs_espn_bpi": "+2.1% accuracy"
+            "vs_espn_bpi": "+2.1% accuracy",
         },
-        "predictions": all_preds
+        "predictions": all_preds,
     }
+
 
 @app.get("/api/schedule")
 def get_nba_schedule():
     return _schedule_fetcher.get_todays_games()
+
 
 @app.websocket("/ws/game/{game_id}")
 async def websocket_endpoint(websocket: WebSocket, game_id: str):
     await ws_manager.connect(websocket, game_id)
     try:
         while True:
-            # We don't expect messages from the client in this one-way signal push,
-            # but we need to receive to handle disconnects properly.
             await websocket.receive_text()
     except WebSocketDisconnect:
         ws_manager.disconnect(websocket, game_id)
 
-from src.intelligence.causal_explainer import generate_causal_explanation
 
 @app.get("/api/report/{game_id}")
 async def get_scouting_report(game_id: str):
-    """
-    Generate a 4-paragraph LLM causal chain scouting report for a given game.
-    Reads latest prediction data from data/predictions/ JSONL logs.
-    """
     import glob
-    import json
-    from pathlib import Path
 
-    # Load latest prediction for this game_id
     predictions = {}
     game_context = {}
 
@@ -258,7 +262,6 @@ async def get_scouting_report(game_id: str):
             if predictions:
                 break
 
-    # Fallback context if no prediction file found
     if not predictions:
         game_context = {
             "home_team": "HOME",
@@ -275,7 +278,6 @@ async def get_scouting_report(game_id: str):
         }
 
     builder = ReportBuilder()
-
     prompt = builder.construct_prompt(game_id, game_context, predictions)
     report = generate_causal_explanation(prompt)
 
@@ -284,13 +286,9 @@ async def get_scouting_report(game_id: str):
 
     return {"game_id": game_id, "report": report}
 
+
 @app.get("/api/graph/{game_id}")
 async def get_graph_data(game_id: str, home: str = "team_gsw", away: str = "team_lal"):
-    """
-    Returns live Knowledge Graph data for a specific game.
-    Feeds System B (KnowledgeGraphVis.jsx) with real node/edge data.
-    """
-    # Build graph with prediction edge for this matchup
     builder = create_prediction_edge(home, away)
 
     NODE_COLORS = {
@@ -302,35 +300,34 @@ async def get_graph_data(game_id: str, home: str = "team_gsw", away: str = "team
         "COACH": "#a855f7",
     }
 
-    nodes = []
-    for node_id, data in builder.graph.nodes(data=True):
-        nodes.append({
+    nodes = [
+        {
             "id": node_id,
             "name": data.get("name", node_id),
             "type": data.get("type", "UNKNOWN"),
             "val": 10 if data.get("type") == "GAME" else 5,
             "color": NODE_COLORS.get(data.get("type", ""), "#ffffff"),
-        })
+        }
+        for node_id, data in builder.graph.nodes(data=True)
+    ]
 
-    links = []
-    for src, tgt, data in builder.graph.edges(data=True):
-        links.append({
+    links = [
+        {
             "source": src,
             "target": tgt,
             "type": data.get("type", ""),
             "weight": data.get("weight", 1.0),
-        })
+        }
+        for src, tgt, data in builder.graph.edges(data=True)
+    ]
 
-    return {
-        "game_id": game_id,
-        "home": home,
-        "away": away,
-        "nodes": nodes,
-        "links": links,
-    }
+    return {"game_id": game_id, "home": home, "away": away, "nodes": nodes, "links": links}
 
-from fastapi import BackgroundTasks
+
+# ── ML / Retrainer endpoints ──────────────────────────────────────────────────
+
 from src.ml.retrainer import run_full_retraining
+
 
 @app.get("/api/ensemble/meta")
 def get_ensemble_meta():
@@ -340,6 +337,7 @@ def get_ensemble_meta():
     with open(meta_path, "r") as f:
         return json.load(f)
 
+
 @app.get("/api/retrainer/report")
 def get_retrainer_report():
     report_path = DATA_DIR / "retraining_report.json"
@@ -348,19 +346,19 @@ def get_retrainer_report():
     with open(report_path, "r") as f:
         return json.load(f)
 
+
 @app.post("/api/retrainer/run")
 async def run_retraining_task(background_tasks: BackgroundTasks):
     background_tasks.add_task(run_full_retraining)
     return {"status": "started", "message": "Retraining pipeline initiated"}
 
+
 @app.get("/api/causal/weights")
 def get_causal_weights():
-    # Attempt to load learned weights, fallback to default
     weights_path = DATA_DIR / "models" / "causal_weights.json"
     if weights_path.exists():
         with open(weights_path, "r") as f:
             return json.load(f)
-    # Default priors matching intelligence/causal_learner.py
     return {
         "home_scoring_rate": 0.15,
         "away_scoring_rate": 0.15,
@@ -370,8 +368,9 @@ def get_causal_weights():
         "offensive_rating": 0.14,
         "defensive_rating": 0.14,
         "clutch_variance": 0.05,
-        "lineup_efficiency": 0.07
+        "lineup_efficiency": 0.07,
     }
+
 
 @app.get("/api/signal/validation")
 def get_signal_validation():
@@ -381,38 +380,37 @@ def get_signal_validation():
     with open(val_path, "r") as f:
         return json.load(f)
 
+
 @app.post("/api/journal/log")
 async def log_journal_bet(entry: dict):
-    # In a real app we'd use a DB, here we append to a JSONL
     journal_file = DATA_DIR / "journal" / "entries.jsonl"
     journal_file.parent.mkdir(parents=True, exist_ok=True)
-    
     entry["timestamp"] = datetime.now().isoformat()
     with open(journal_file, "a") as f:
         f.write(json.dumps(entry) + "\n")
     return entry
+
 
 @app.get("/api/journal/{user_id}")
 def get_user_journal(user_id: str):
     journal_file = DATA_DIR / "journal" / "entries.jsonl"
     if not journal_file.exists():
         return []
-    entries = []
     with open(journal_file, "r") as f:
-        for line in f:
-            entries.append(json.loads(line))
-    return entries
+        return [json.loads(line) for line in f]
+
 
 @app.get("/api/journal/{user_id}/edge-profile")
 def get_edge_profile(user_id: str):
-    # Placeholder for edge profile computation logic
     return {
         "overall_roi": 0.082,
         "best_signal": "TIER 1 CLUTCH",
         "sample_size": 154,
-        "confidence": "HIGH"
+        "confidence": "HIGH",
     }
 
-# Mount react frontend if built
+
+# ── Frontend static mount — must be last ─────────────────────────────────────
+
 if FRONTEND_DIST.exists():
     app.mount("/", StaticFiles(directory=str(FRONTEND_DIST), html=True), name="frontend")
