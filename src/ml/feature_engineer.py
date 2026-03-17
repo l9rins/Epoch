@@ -1,9 +1,11 @@
 import numpy as np
+import json
+from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 from collections import defaultdict
 
 # Feature dimension constant
-FEATURE_DIM = 42
+FEATURE_DIM = 50
 HOME_COURT_ADVANTAGE_PRIOR = 0.035
 
 # Feature index map for interpretability
@@ -32,6 +34,9 @@ FEATURE_NAMES = [
     # Group F: Causal
     "causal_wp_adj", "injury_impact_home",
     "injury_impact_away", "referee_foul_rate_norm",
+    # Group G: Advanced (Added in upgrade_ensemble)
+    "elo_diff_norm", "home_elo_wp", "home_srs_norm", "away_srs_norm",
+    "srs_diff_norm", "home_streak", "away_streak", "season_progress",
 ]
 
 assert len(FEATURE_NAMES) == FEATURE_DIM, f"Expected {FEATURE_DIM} features, got {len(FEATURE_NAMES)}"
@@ -125,9 +130,13 @@ def engineer_features(
     injury_impact_home: float = 0.0,
     injury_impact_away: float = 0.0,
     referee_foul_rate: float = 1.0,
+    # New optional context for 50-feature vector
+    elo_data: Optional[dict] = None,
+    srs_data: Optional[dict] = None,
+    team_histories: Optional[dict] = None,
 ) -> np.ndarray:
     """
-    Transform one game log record into a 42-feature vector.
+    Transform one game log record into a 50-feature vector.
     all_game_logs required for momentum, trend, and H2H computation.
     """
     vec = np.zeros(FEATURE_DIM, dtype=np.float32)
@@ -194,13 +203,91 @@ def engineer_features(
     vec[36] = 0.5   # sos placeholders
     vec[37] = 0.5
 
-    # Group F: Causal Enrichment
-    vec[38] = np.clip(causal_wp_adjustment, -0.25, 0.25)
-    vec[39] = np.clip(injury_impact_home, 0.0, 1.0)
-    vec[40] = np.clip(injury_impact_away, 0.0, 1.0)
+    # Group F: Causal
+    vec[38] = causal_wp_adjustment
+    vec[39] = injury_impact_home
+    vec[40] = injury_impact_away
     vec[41] = np.clip(referee_foul_rate, 0.8, 1.2)
 
+    # Group G: Advanced (indices 42-49)
+    if elo_data and srs_data:
+        gid = game_log.get("game_id", "")
+        elo = elo_data.get(gid, {})
+        srs = srs_data.get(gid, {})
+        
+        vec[42] = elo.get("elo_diff", 0.0) / 400.0
+        vec[43] = elo.get("home_elo_wp", 0.574)
+        vec[44] = srs.get("home_srs", 0.0) / 20.0
+        vec[45] = srs.get("away_srs", 0.0) / 20.0
+        vec[46] = (srs.get("home_srs", 0.0) - srs.get("away_srs", 0.0)) / 20.0
+        
+        # Streak and Season Progress
+        if team_histories:
+            home = game_log.get("home_team", "")
+            away = game_log.get("away_team", "")
+            date = game_log.get("game_date", "")
+            season = game_log.get("season", "")
+            
+            vec[47] = compute_streak(team_histories.get(home, []), before_date=date)
+            vec[48] = compute_streak(team_histories.get(away, []), before_date=date)
+            vec[49] = compute_season_progress(date, season)
+            
+            vec[47] = compute_streak(team_histories.get(home, []), date)
+            vec[48] = compute_streak(team_histories.get(away, []), date)
+            vec[49] = compute_season_progress(date, season)
+    else:
+        # Fallback to defaults for Group G
+        vec[42:50] = 0.0
+        vec[43] = 0.574 # league avg home win rate
+        vec[49] = 0.5   # mid season
+
     return vec
+
+
+def compute_streak(team_games: list[dict], before_date: str, max_streak: int = 10) -> float:
+    """
+    Current win/loss streak for a team before a given date.
+    Returns value in [-1, 1]: +1 = 10-game win streak, -1 = 10-game loss streak.
+    """
+    prior = [g for g in team_games if g.get("game_date", "") < before_date]
+    if not prior:
+        return 0.0
+
+    streak = 0
+    last_result = None
+
+    for game in reversed(prior):
+        is_home = game.get("home_team") == game.get("team_of_interest")
+        home_win = game.get("home_win", 0)
+        won = (is_home and home_win == 1) or (not is_home and home_win == 0)
+
+        if last_result is None:
+            last_result = won
+            streak = 1
+        elif won == last_result:
+            streak += 1
+        else:
+            break
+
+    signed_streak = streak if last_result else -streak
+    return float(np.clip(signed_streak / max_streak, -1.0, 1.0))
+
+
+def compute_season_progress(game_date: str, season: str) -> float:
+    """
+    Fraction of NBA regular season elapsed at game_date.
+    Season typically runs October through April (~172 days).
+    """
+    try:
+        season_year = int(season[:4])
+        # Regular season: ~Oct 18 to Apr 10
+        season_start = datetime(season_year, 10, 18)
+        season_end = datetime(season_year + 1, 4, 10)
+        game_dt = datetime.strptime(game_date, "%Y-%m-%d")
+        progress = (game_dt - season_start).days / (season_end - season_start).days
+        return float(np.clip(progress, 0.0, 1.0))
+    except Exception:
+        return 0.5
 
 def build_feature_matrix(
     game_logs: List[dict],

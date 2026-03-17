@@ -13,8 +13,8 @@ RF_WEIGHT = 0.45
 XGB_WEIGHT = 0.55
 DISAGREEMENT_THRESHOLD = 0.15
 MIN_TRAINING_SAMPLES = 200
-ENSEMBLE_MODEL_PATH = Path("data/models/ensemble_model.pkl")
-ENSEMBLE_META_PATH = Path("data/models/ensemble_meta.json")
+ENSEMBLE_MODEL_PATH = Path("data/models/ensemble_model_v2.pkl")
+ENSEMBLE_META_PATH = Path("data/models/ensemble_meta_v2.json")
 
 # RF hyperparameters — tuned for NBA game prediction
 RF_PARAMS = {

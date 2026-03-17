@@ -8,6 +8,8 @@ from pathlib import Path
 import json
 from datetime import datetime
 import time
+from typing import Optional, List
+from pydantic import BaseModel
 
 from src.binary.ros_reader import load_ros, build_name_pool, read_all_players
 from src.binary.constants import FIELD_TO_IDX
@@ -17,6 +19,7 @@ from src.intelligence.report_builder import ReportBuilder
 from src.intelligence.causal_explainer import generate_causal_explanation
 from src.graph.builder import KnowledgeGraphBuilder
 from src.graph.gnn_model import create_prediction_edge
+from src.intelligence.pregame_predictor import PregamePredictor
 
 app = FastAPI(title="Rostra V1", description="Epoch Engine Payload API")
 
@@ -52,6 +55,24 @@ def get_player_val(player, field):
     if t == "skill":
         return player.skills[idx]
     return 0
+
+
+class PredictionRequest(BaseModel):
+    home_team: str
+    away_team: str
+    game_date: Optional[str] = None
+    injuries: Optional[List[dict]] = None
+
+
+_pregame_predictor = PregamePredictor()
+
+
+# ── SESSION A: Pipeline Health endpoint ──────────────────────────────────────
+
+@app.get("/health")
+def get_health():
+    """General health check for deployment hardening."""
+    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
 
 # ── SESSION A: Pipeline Health endpoint ──────────────────────────────────────
@@ -167,6 +188,43 @@ def get_current_signal():
         raise HTTPException(status_code=503, detail="Simulation appears to be dead")
     with open(signal_file, "r") as f:
         return json.load(f)
+
+
+@app.post("/api/predict")
+async def predict_game(req: PredictionRequest):
+    """
+    Run the full 50-feature ensemble prediction and return Kelly sizing.
+    Broadcasts results to any active WebSocket listeners for this game.
+    """
+    try:
+        prediction = _pregame_predictor.predict_ensemble(
+            req.home_team, req.away_team, req.game_date, injuries=req.injuries
+        )
+        
+        # Broadcast via WebSocket
+        msg = {
+            "type": "PREDICTION_UPDATE",
+            "payload": prediction
+        }
+        await ws_manager.broadcast("LIVE_FEED", msg)
+        await ws_manager.broadcast(prediction["game_id"], msg)
+        
+        # Also broadcast as an ALERT for the human feed
+        alert = {
+            "type": "ALERT",
+            "alert_type": "PREGAME_EDGE",
+            "tier": prediction["tier"],
+            "message": f"PRE-GAME: {req.home_team} vs {req.away_team} | WP: {prediction['win_probability']:.1%} | Tier: {prediction['tier']} | Kelly: ${prediction['kelly']['recommended_bet_size']}",
+            "timestamp": time.time()
+        }
+        await ws_manager.broadcast("LIVE_FEED", alert)
+        await ws_manager.broadcast(prediction["game_id"], alert)
+        
+        return prediction
+    except Exception as exc:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Prediction failed: {exc}")
 
 
 from src.ml.calibration import CalibrationEngine
@@ -338,7 +396,10 @@ from src.ml.retrainer import run_full_retraining
 
 @app.get("/api/ensemble/meta")
 def get_ensemble_meta():
-    meta_path = DATA_DIR / "models" / "ensemble_meta.json"
+    meta_path = DATA_DIR / "models" / "ensemble_meta_v2.json"
+    if not meta_path.exists():
+        # Fallback to v1 if v2 not found
+        meta_path = DATA_DIR / "models" / "ensemble_meta.json"
     if not meta_path.exists():
         return {"status": "not_trained", "ensemble_agreement": "N/A", "auc": 0.0}
     with open(meta_path, "r") as f:

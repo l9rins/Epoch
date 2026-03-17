@@ -14,6 +14,11 @@ from src.binary.ros_reader import load_ros, read_all_players, build_name_pool
 from src.intelligence.win_probability import WinProbabilityModel
 from src.ml.calibration import CalibrationEngine
 from src.simulation.memory_reader import GameState
+from src.ml.feature_engineer import engineer_features
+from src.ml.ensemble_model import predict_single_game
+from src.intelligence.injury_matrix import get_injury_impact
+from collections import defaultdict
+import numpy as np
 
 @dataclass
 class Prediction:
@@ -40,6 +45,32 @@ class PregamePredictor:
         self._hist_db = None
         self._ref_model = None
         self._fatigue_model = None
+        
+        # Load upgrade context for 50-feature model
+        self.elo_lookup = {}
+        if Path("data/elo_ratings.json").exists():
+            with open("data/elo_ratings.json") as f:
+                self.elo_lookup = json.load(f)
+                
+        self.srs_lookup = {}
+        if Path("data/srs_ratings.json").exists():
+            with open("data/srs_ratings.json") as f:
+                self.srs_lookup = json.load(f)
+                
+        self.all_game_logs = []
+        if Path("data/real_game_logs.jsonl").exists():
+            with open("data/real_game_logs.jsonl") as f:
+                for line in f:
+                    self.all_game_logs.append(json.loads(line))
+        
+        # Team histories for streaks
+        self.team_histories = defaultdict(list)
+        for g in sorted(self.all_game_logs, key=lambda x: x.get("game_date", "")):
+            h, a = g.get("home_team"), g.get("away_team")
+            gh, ga = g.copy(), g.copy()
+            gh["team_of_interest"], ga["team_of_interest"] = h, a
+            self.team_histories[h].append(gh)
+            self.team_histories[a].append(ga)
 
     def _get_hist_db(self):
         if self._hist_db is None:
@@ -217,6 +248,112 @@ class PregamePredictor:
             "timestamp": datetime.now().isoformat(),
             "result": None
         }
+        return prediction
+
+    def predict_ensemble(self, home_team: str, away_team: str, game_date: str = None, injuries: list[dict] = None) -> dict:
+        """
+        New 50-feature ensemble prediction.
+        Uses cached Elo, SRS, and team histories.
+        """
+        if not game_date:
+            game_date = datetime.now().strftime("%Y-%m-%d")
+        
+        # 1. Synthesize game_log for feature engineer
+        game_log = {
+            "home_team": home_team,
+            "away_team": away_team,
+            "game_date": game_date,
+            "season": "2024-25",
+            "game_id": f"api_{uuid.uuid4().hex[:8]}"
+        }
+        
+        # Populate with recent averages if possible
+        def get_recent_stats(team):
+            hist = self.team_histories.get(team, [])
+            if not hist: return 110.0, 110.0, 0.5, 98.0
+            recent = hist[-10:]
+            o = sum(g.get("home_ortg" if g["home_team"]==team else "away_ortg", 110.0) for g in recent)/len(recent)
+            d = sum(g.get("home_drtg" if g["home_team"]==team else "away_drtg", 110.0) for g in recent)/len(recent)
+            w = sum(1 if (g["home_team"]==team and g.get("home_win")==1) or (g["away_team"]==team and g.get("home_win")==0) else 0 for g in hist)/len(hist)
+            p = sum(g.get("home_pace" if g["home_team"]==team else "away_pace", 98.0) for g in recent)/len(recent)
+            return o, d, w, p
+
+        h_o, h_d, h_w, h_p = get_recent_stats(home_team)
+        a_o, a_d, a_w, a_p = get_recent_stats(away_team)
+        
+        game_log.update({
+            "home_ortg": h_o, "home_drtg": h_d, "home_win_pct_prior": h_w, "home_pace": h_p,
+            "away_ortg": a_o, "away_drtg": a_d, "away_win_pct_prior": a_w, "away_pace": a_p,
+        })
+        
+        # 1.5 Calculate injury impact
+        injury_impact_home = 0.0
+        injury_impact_away = 0.0
+        
+        if injuries:
+            for inj in injuries:
+                team = inj.get("team")
+                body_part = inj.get("body_part", "core")
+                severity = inj.get("severity", "moderate")
+                # Severity can be int (1, 2, 3) or string
+                if isinstance(severity, int):
+                    severity_map = {1: "minor", 2: "moderate", 3: "severe"}
+                    severity = severity_map.get(severity, "moderate")
+                
+                try:
+                    impact = get_injury_impact(body_part, severity)
+                    # Use default usage 0.25 (same as enrich_features)
+                    # Formula: (1.0 - impact) * usage * 3.0
+                    impact_score = float(np.clip((1.0 - impact) * 0.25 * 3.0, 0.0, 1.0))
+                    
+                    if team == home_team:
+                        injury_impact_home += impact_score
+                    elif team == away_team:
+                        injury_impact_away += impact_score
+                except Exception as exc:
+                    print(f"Injury calculation failed: {exc}")
+                    pass
+        
+        print(f"DEBUG: injury_impact_home={injury_impact_home}, injury_impact_away={injury_impact_away}")
+        
+        # 2. Build 50-feature vector
+        vec = engineer_features(
+            game_log, 
+            self.all_game_logs,
+            injury_impact_home=min(injury_impact_home, 1.0),
+            injury_impact_away=min(injury_impact_away, 1.0),
+            elo_data=self.elo_lookup,
+            srs_data=self.srs_lookup,
+            team_histories=self.team_histories
+        )
+        
+        # 3. Predict
+        res = predict_single_game(vec)
+        print(f"DEBUG: Win probability: {res['win_probability']}")
+        
+        # 4. Integrate with Kelly
+        from src.intelligence.kelly_criterion import compute_kelly_recommendation, serialize_recommendation
+        kelly = compute_kelly_recommendation(
+            signal_type="WIN_PROB_THRESHOLD",
+            tier=1 if res["confidence"] == "HIGH" else 2 if res["confidence"] == "MEDIUM" else 3,
+            epoch_win_probability=res["win_probability"],
+            bankroll=10000.0, # Default bankroll
+            is_stale=False # Health check would go here
+        )
+        
+        prediction = {
+            "game_id": game_log["game_id"],
+            "home_team": home_team,
+            "away_team": away_team,
+            "win_probability": res["win_probability"],
+            "confidence": res["confidence"],
+            "tier": kelly.tier,
+            "kelly": serialize_recommendation(kelly),
+            "timestamp": datetime.now().isoformat(),
+            "features_used": 50,
+            "model_version": "v2_upgraded"
+        }
+        
         return prediction
 
     def log_prediction(self, prediction: dict):
