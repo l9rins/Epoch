@@ -15,6 +15,12 @@ from src.binary.ros_reader import load_ros, build_name_pool, read_all_players
 from src.binary.constants import FIELD_TO_IDX
 from src.pipeline.schedule_fetcher import ScheduleFetcher
 from src.api.websocket import manager as ws_manager
+from src.pipeline.odds_fetcher import OddsFetcher
+from src.intelligence.signal_alerts import AlertEngine, SignalAlert
+
+_odds_fetcher  = OddsFetcher()
+_alert_engine  = AlertEngine(log_dir="data/signal_alerts")
+
 from src.intelligence.report_builder import ReportBuilder
 from src.intelligence.causal_explainer import generate_causal_explanation
 from src.graph.builder import KnowledgeGraphBuilder
@@ -201,24 +207,24 @@ async def predict_game(req: PredictionRequest):
             req.home_team, req.away_team, req.game_date, injuries=req.injuries
         )
         
-        # Broadcast via WebSocket
-        msg = {
-            "type": "PREDICTION_UPDATE",
-            "payload": prediction
-        }
-        await ws_manager.broadcast("LIVE_FEED", msg)
-        await ws_manager.broadcast(prediction["game_id"], msg)
-        
-        # Also broadcast as an ALERT for the human feed
-        alert = {
-            "type": "ALERT",
-            "alert_type": "PREGAME_EDGE",
-            "tier": prediction["tier"],
-            "message": f"PRE-GAME: {req.home_team} vs {req.away_team} | WP: {prediction['win_probability']:.1%} | Tier: {prediction['tier']} | Kelly: ${prediction['kelly']['recommended_bet_size']}",
-            "timestamp": time.time()
-        }
-        await ws_manager.broadcast("LIVE_FEED", alert)
-        await ws_manager.broadcast(prediction["game_id"], alert)
+        # Broadcast prediction update
+        await ws_manager.broadcast_prediction(prediction)
+
+        # Fire signal alert if tier warrants it
+        if prediction.get("tier") in (1, 2):
+            await ws_manager.broadcast_signal({
+                "tier":       prediction["tier"],
+                "alert_type": "PREGAME_EDGE",
+                "message":    (
+                    f"PRE-GAME: {req.home_team} vs {req.away_team} | "
+                    f"WP: {prediction['win_probability']:.1%} | "
+                    f"Tier {prediction['tier']} | "
+                    f"Kelly: ${prediction['kelly']['recommended_bet_size']}"
+                ),
+                "value":      prediction["win_probability"],
+                "game_id":    prediction["game_id"],
+                "timestamp":  time.time(),
+            })
         
         return prediction
     except Exception as exc:
@@ -296,6 +302,61 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
             await websocket.receive_text()
     except WebSocketDisconnect:
         ws_manager.disconnect(websocket, game_id)
+
+
+@app.get("/api/odds/today")
+async def get_todays_odds():
+    """
+    Live NBA moneylines, spreads, and totals from The Odds API.
+    Cached for 5 minutes to preserve free-tier quota (500 req/month).
+    Returns best line per book per game, structured for the Bettor UI panel.
+    """
+    return _odds_fetcher.get_todays_odds()
+
+
+@app.websocket("/ws/signals")
+async def websocket_signals(websocket: WebSocket):
+    """
+    Global live signal feed — connects any client to the LIVE_FEED channel.
+    Receives: ALERT, PREDICTION_UPDATE, PING messages.
+    Client can send: {"type": "PING"} to check connection.
+    """
+    from src.api.websocket import LIVE_FEED_CHANNEL
+    await ws_manager.connect(websocket, LIVE_FEED_CHANNEL)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            try:
+                msg = json.loads(data)
+                if msg.get("type") == "PING":
+                    await websocket.send_json({"type": "PONG", "timestamp": time.time()})
+            except Exception:
+                pass
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket, LIVE_FEED_CHANNEL)
+
+
+@app.get("/api/ws/status")
+def get_ws_status():
+    """WebSocket connection counts per channel — for debugging."""
+    return {
+        "channels":   ws_manager.get_channels(),
+        "total":      ws_manager.get_connected_count(),
+        "live_feed":  ws_manager.get_connected_count("LIVE_FEED"),
+    }
+
+
+@app.post("/api/signal/broadcast")
+async def broadcast_signal(signal: dict):
+    """
+    Internal endpoint — pipeline calls this to push a signal to all WS clients.
+    In production, call ws_manager.broadcast_signal() directly from Python.
+    Protected: only callable from localhost in prod (add IP check if needed).
+
+    Body: {"tier": 1, "alert_type": "PREGAME_EDGE", "message": "...", "value": 0.71}
+    """
+    await ws_manager.broadcast_signal(signal)
+    return {"status": "broadcast", "channel": "LIVE_FEED"}
 
 
 @app.get("/api/report/{game_id}")

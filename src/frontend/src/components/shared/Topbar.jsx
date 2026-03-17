@@ -8,7 +8,7 @@ const modeStyle = {
   roster:  { background: 'rgba(255,171,0,0.10)',  color: 'var(--amber)',  border: '1px solid rgba(255,171,0,0.2)' },
 }
 
-export default function Topbar({ mode, setMode, wsConnected }) {
+export default function Topbar({ mode, setMode, wsConnected, user, tier, onLogout }) {
   return (
     <div style={{
       background: 'var(--bg1)',
