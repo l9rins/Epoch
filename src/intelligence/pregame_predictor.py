@@ -11,17 +11,7 @@ from dataclasses import dataclass
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from src.binary.ros_reader import load_ros, read_all_players, build_name_pool
-from src.intelligence.win_probability import WinProbabilityModel
 from src.ml.calibration import CalibrationEngine
-
-@dataclass
-class GameState:
-    timestamp: float
-    quarter: int
-    clock: float
-    home_score: int
-    away_score: int
-    possession: int
 from src.ml.feature_engineer import engineer_features
 from src.ml.ensemble_model import predict_single_game
 from src.intelligence.injury_matrix import get_injury_impact
@@ -44,7 +34,6 @@ class PregamePredictor:
     HOME_COURT_ADVANTAGE = 0.08  # ~58% home win rate → +8% baseline
 
     def __init__(self):
-        self.win_model = WinProbabilityModel()
         self.cal_engine = CalibrationEngine()
         self.predictions_dir = Path("data/predictions")
         self.predictions_dir.mkdir(parents=True, exist_ok=True)
@@ -165,98 +154,6 @@ class PregamePredictor:
             
         except Exception:
             return 50.0
-
-    def predict(self, home_team: str, away_team: str,
-                ref_names: list = None,
-                home_b2b: bool = False, away_b2b: bool = False) -> dict:
-        home_strength = self.get_team_strength(home_team)
-        away_strength = self.get_team_strength(away_team)
-        
-        # 1. Base probability from WinProbabilityModel at tipoff
-        # (0-0, Q1, 720s)
-        dummy_state = GameState(timestamp=0, quarter=1, clock=720.0, home_score=0, away_score=0, possession=0)
-        base_prob = self.win_model(dummy_state)
-        
-        # 2. Team strength adjustment
-        strength_diff = home_strength - away_strength
-        adj_prob = base_prob + (strength_diff * 0.01)
-        
-        # 3. Home court advantage (+8%)
-        adj_prob += self.HOME_COURT_ADVANTAGE
-        
-        # 4. H2H adjustment
-        h2h_home_wins = 0
-        h2h_away_wins = 0
-        hist = self._get_hist_db()
-        if hist:
-            try:
-                h2h = hist.query_head_to_head(home_team, away_team, last_n=10)
-                for g in h2h:
-                    if g["winner"] == "HOME" and g["home_team"] == home_team:
-                        h2h_home_wins += 1
-                    elif g["winner"] == "AWAY" and g["away_team"] == home_team:
-                        h2h_home_wins += 1
-                    else:
-                        h2h_away_wins += 1
-                
-                if h2h:
-                    h2h_ratio = h2h_home_wins / len(h2h)
-                    # Nudge probability toward H2H ratio (small weight)
-                    adj_prob += (h2h_ratio - 0.5) * 0.05
-            except Exception:
-                pass
-        
-        # 5. Back-to-back fatigue
-        fatigue = self._get_fatigue_model()
-        if fatigue and home_b2b:
-            adj_prob -= 0.03  # Home team fatigued
-        if fatigue and away_b2b:
-            adj_prob += 0.03  # Away team fatigued (helps home)
-        
-        # Clamp 0.20 to 0.80
-        final_prob = max(0.20, min(0.80, adj_prob))
-        
-        # 6. Predicted total (base 220, adjusted by referee)
-        predicted_total = 220
-        referee_pace_factor = 1.0
-        ref_model = self._get_ref_model()
-        if ref_model and ref_names:
-            try:
-                base_pred = {"predicted_total": predicted_total}
-                adjusted = ref_model.adjust_prediction(base_pred, ref_names)
-                predicted_total = adjusted["predicted_total"]
-                referee_pace_factor = adjusted.get("referee_pace_factor", 1.0)
-            except Exception:
-                pass
-        
-        # 7. Confidence score (0-1, higher = more data available)
-        confidence = 0.3  # Base confidence
-        if h2h_home_wins + h2h_away_wins > 0:
-            confidence += 0.2  # H2H data available
-        if ref_names:
-            confidence += 0.2  # Referee data available
-        if home_strength != 50.0:
-            confidence += 0.15  # Home team strength from real data
-        if away_strength != 50.0:
-            confidence += 0.15  # Away team strength from real data
-        confidence = min(1.0, confidence)
-        
-        prediction = {
-            "game_id": str(uuid.uuid4())[:8],
-            "home_team": home_team,
-            "away_team": away_team,
-            "predicted_home_win_prob": round(float(final_prob), 3),
-            "predicted_total": predicted_total,
-            "h2h_home_wins": h2h_home_wins,
-            "h2h_away_wins": h2h_away_wins,
-            "referee_pace_factor": round(referee_pace_factor, 3),
-            "home_back_to_back": home_b2b,
-            "away_back_to_back": away_b2b,
-            "confidence": round(confidence, 2),
-            "timestamp": datetime.now().isoformat(),
-            "result": None
-        }
-        return prediction
 
     def predict_ensemble(self, home_team: str, away_team: str, game_date: str = None, injuries: list[dict] = None) -> dict:
         """
