@@ -13,7 +13,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from src.binary.ros_reader import load_ros, read_all_players, build_name_pool
 from src.intelligence.win_probability import WinProbabilityModel
 from src.ml.calibration import CalibrationEngine
-from src.simulation.memory_reader import GameState
+
+@dataclass
+class GameState:
+    timestamp: float
+    quarter: int
+    clock: float
+    home_score: int
+    away_score: int
+    possession: int
 from src.ml.feature_engineer import engineer_features
 from src.ml.ensemble_model import predict_single_game
 from src.intelligence.injury_matrix import get_injury_impact
