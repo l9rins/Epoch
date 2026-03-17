@@ -10,6 +10,12 @@ from datetime import datetime
 import time
 from typing import Optional, List
 from pydantic import BaseModel
+import os
+from fastapi import Header, HTTPException, Depends
+
+async def require_internal_secret(x_internal_secret: str = Header(...)):
+    if x_internal_secret != os.getenv("INTERNAL_API_SECRET", ""):
+        raise HTTPException(status_code=403, detail="Forbidden")
 
 from src.binary.ros_reader import load_ros, build_name_pool, read_all_players
 from src.binary.constants import FIELD_TO_IDX
@@ -355,7 +361,7 @@ def get_ws_status():
     }
 
 
-@app.post("/api/signal/broadcast")
+@app.post("/api/signal/broadcast", dependencies=[Depends(require_internal_secret)])
 async def broadcast_signal(signal: dict):
     """
     Internal endpoint — pipeline calls this to push a signal to all WS clients.
@@ -519,7 +525,7 @@ def get_signal_validation():
         return json.load(f)
 
 
-@app.post("/api/journal/log")
+@app.post("/api/journal/log", dependencies=[Depends(require_internal_secret)])
 async def log_journal_bet(entry: dict):
     journal_file = DATA_DIR / "journal" / "entries.jsonl"
     journal_file.parent.mkdir(parents=True, exist_ok=True)
