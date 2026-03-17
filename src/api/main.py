@@ -24,7 +24,16 @@ _alert_engine  = AlertEngine(log_dir="data/signal_alerts")
 from src.intelligence.report_builder import ReportBuilder
 from src.intelligence.causal_explainer import generate_causal_explanation
 from src.graph.builder import KnowledgeGraphBuilder
-from src.graph.gnn_model import create_prediction_edge
+try:
+    from src.graph.gnn_model import create_prediction_edge
+    GNN_AVAILABLE = True
+except ImportError:
+    GNN_AVAILABLE = False
+    def create_prediction_edge(home, away):
+        from src.graph.builder import KnowledgeGraphBuilder
+        builder = KnowledgeGraphBuilder()
+        builder.build_poc_graph()
+        return builder
 from src.intelligence.pregame_predictor import PregamePredictor
 
 app = FastAPI(title="Rostra V1", description="Epoch Engine Payload API")
